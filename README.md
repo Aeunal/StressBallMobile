@@ -54,6 +54,19 @@ Open the root folder in Android Studio to run on an emulator or device.
 CI (`.github/workflows/android.yml`) runs the engine tests, assembles the
 debug APK and uploads it as a workflow artifact on every push.
 
+## Installing a dev build on a phone
+
+Every push also publishes the APK as a pre-release tagged after the branch,
+so the download URL is stable and always serves that branch's newest build:
+
+```
+https://github.com/Aeunal/StressBallMobile/releases/download/dev-<branch-with-dashes>/stressball-debug.apk
+```
+
+Open that link in the phone's browser and allow installs from the browser when
+Android asks. The build is debug-signed, so uninstall it before installing a
+release-signed build later — the signatures do not match.
+
 ## Roadmap ideas
 
 - Online leaderboards for best RPM and fastest 1M points.
