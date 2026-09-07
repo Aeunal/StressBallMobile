@@ -3,9 +3,10 @@
     <string name="app_name">Stres Topu</string>
 
     <!-- Hints under the ball -->
-    <string name="hint_draw_circles">Döndürmek için topun üstünde daire çiz</string>
-    <string name="hint_keep_circling">Çizmeye devam et. Hızlı daire, daha çok RPM</string>
+    <string name="hint_draw_circles">Topun üstünde daire çiz ya da üzerinden kaydır</string>
+    <string name="hint_keep_circling">Devam et. Hızlı hareket, daha çok RPM</string>
     <string name="hint_hold_to_brake">Frenlemek için topu tut</string>
+    <string name="hint_pinch_turbo">Turbo için topu üstten ve alttan sık</string>
 
     <!-- Header / meter -->
     <string name="rate_format">%1$s / sn  •  x%2$s</string>
@@ -15,14 +16,19 @@
     <string name="best_format">rekor %1$s</string>
     <string name="badge_petals">Kabuk açık x%1$s</string>
     <string name="badge_resonance">Rezonans x%1$s</string>
-    <string name="badge_turbo">TURBO x2</string>
+    <string name="badge_turbo">TURBO</string>
     <string name="badge_overheat">AŞIRI ISINMA</string>
     <string name="badge_motor">Motor boşta</string>
 
+    <!-- Turbo bar -->
+    <string name="turbo_label">Turbo</string>
+    <string name="turbo_ready">hazır • sık</string>
+    <string name="turbo_active">x%1$s</string>
+    <string name="turbo_empty">boş</string>
+    <string name="turbo_cooldown">bekleme %1$s</string>
+    <string name="turbo_refilling">doluyor</string>
+
     <!-- Action bar -->
-    <string name="turbo_button">TURBO</string>
-    <string name="turbo_hold_hint">basılı tut</string>
-    <string name="turbo_empty">BOŞ</string>
     <string name="upgrades_button">Yükseltmeler</string>
     <string name="style_button">Görünüm</string>
     <string name="stats_button">İstatistik</string>
@@ -68,7 +74,6 @@
     <string name="equipped_label">Takılı</string>
     <string name="equip_button">Tak</string>
     <string name="language_title">Dil</string>
-    <string name="language_system">Cihaz dili</string>
     <string name="language_en">English</string>
     <string name="language_tr">Türkçe</string>
 </resources>

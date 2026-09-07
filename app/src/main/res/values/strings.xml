@@ -3,9 +3,10 @@
     <string name="app_name">Stress Ball</string>
 
     <!-- Hints under the ball -->
-    <string name="hint_draw_circles">Draw circles on the ball to spin it</string>
-    <string name="hint_keep_circling">Keep circling. Faster circles, more RPM</string>
+    <string name="hint_draw_circles">Draw circles on the ball, or swipe across it</string>
+    <string name="hint_keep_circling">Keep going. Faster strokes, more RPM</string>
     <string name="hint_hold_to_brake">Hold the ball still to brake it</string>
+    <string name="hint_pinch_turbo">Pinch the ball from top and bottom for turbo</string>
 
     <!-- Header / meter -->
     <string name="rate_format">%1$s / s  •  x%2$s</string>
@@ -15,14 +16,19 @@
     <string name="best_format">best %1$s</string>
     <string name="badge_petals">Petals open x%1$s</string>
     <string name="badge_resonance">Resonance x%1$s</string>
-    <string name="badge_turbo">TURBO x2</string>
+    <string name="badge_turbo">TURBO</string>
     <string name="badge_overheat">OVERHEATING</string>
     <string name="badge_motor">Motor idling</string>
 
+    <!-- Turbo bar -->
+    <string name="turbo_label">Turbo</string>
+    <string name="turbo_ready">ready • pinch</string>
+    <string name="turbo_active">x%1$s</string>
+    <string name="turbo_empty">empty</string>
+    <string name="turbo_cooldown">cooldown %1$s</string>
+    <string name="turbo_refilling">refilling</string>
+
     <!-- Action bar -->
-    <string name="turbo_button">TURBO</string>
-    <string name="turbo_hold_hint">hold</string>
-    <string name="turbo_empty">EMPTY</string>
     <string name="upgrades_button">Upgrades</string>
     <string name="style_button">Style</string>
     <string name="stats_button">Stats</string>
@@ -68,7 +74,6 @@
     <string name="equipped_label">Equipped</string>
     <string name="equip_button">Equip</string>
     <string name="language_title">Language</string>
-    <string name="language_system">Device</string>
     <string name="language_en">English</string>
     <string name="language_tr">Türkçe</string>
 </resources>

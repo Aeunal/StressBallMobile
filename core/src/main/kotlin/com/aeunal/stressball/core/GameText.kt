@@ -45,6 +45,7 @@ object EnglishText : GameText {
     override fun upgradeName(id: String): String = when (id) {
         Upgrades.GEAR -> "Gear Cap"
         Upgrades.GRIP -> "Grip Tape"
+        Upgrades.TRACTION -> "Rubber Tread"
         Upgrades.OVERDRIVE -> "Turbo"
         Upgrades.BEARINGS -> "Slick Bearings"
         Upgrades.FLYWHEEL -> "Flywheel Core"
@@ -60,7 +61,8 @@ object EnglishText : GameText {
     override fun upgradeTagline(id: String): String = when (id) {
         Upgrades.GEAR -> "A taller gear on the cap turns one fast finger circle into more ball turns. Slow turns stay one-to-one."
         Upgrades.GRIP -> "The ball catches your finger faster and brakes harder when you hold it."
-        Upgrades.OVERDRIVE -> "Hold for instant momentum. The charge drains while held and refills when released; holding it empty slows you down."
+        Upgrades.TRACTION -> "A grippier face. Swiping across the ball pushes it harder, so even a swipe slower than the ball still helps instead of braking."
+        Upgrades.OVERDRIVE -> "Pinch the ball from top and bottom. Squeeze harder for more thrust, pinch fast for a kick. Fuel burns while squeezed and only refills after a cooldown."
         Upgrades.BEARINGS -> "Oiled bearings. Less drag, so the ball keeps its speed much longer."
         Upgrades.FLYWHEEL -> "A heavy core stores momentum; the ball coasts far longer."
         Upgrades.MOTOR -> "A tiny motor in the cap keeps the ball turning while you rest."
@@ -75,7 +77,8 @@ object EnglishText : GameText {
     override fun upgradeEffect(id: String, level: Int): String = when (id) {
         Upgrades.GEAR -> "Fast circles x${n2(Stats.gearRatio(level))}"
         Upgrades.GRIP -> "Grip ${n0(Stats.gripAccel(level) / Stats.gripAccel(0) * 100)}%"
-        Upgrades.OVERDRIVE -> "${n1(Stats.turboCapacity(level))}s boost, ${n0(Stats.turboRefill(level))}s refill, limit x${n1(Stats.turboCapMultiplier(level))}"
+        Upgrades.TRACTION -> "Swipe x${n2(Stats.tractionRatio(level))}"
+        Upgrades.OVERDRIVE -> "${n1(Stats.turboCapacity(level))}s fuel, ${n1(Stats.turboCooldown(level))}s cooldown, ${n1(Stats.turboRefill(level))}s refill, limit x${n1(Stats.turboCapMultiplier(level))}"
         Upgrades.BEARINGS -> "Drag ${n0(Stats.dragPercent(level))}%"
         Upgrades.FLYWHEEL -> "Inertia x${n2(Stats.inertia(level))}"
         Upgrades.MOTOR -> if (level == 0) "No motor" else "Idles at ${n0(Stats.motorRpm(level))} RPM"
@@ -164,6 +167,7 @@ object TurkishText : GameText {
     override fun upgradeName(id: String): String = when (id) {
         Upgrades.GEAR -> "Dişli Kapak"
         Upgrades.GRIP -> "Tutuş Bandı"
+        Upgrades.TRACTION -> "Kauçuk Diş"
         Upgrades.OVERDRIVE -> "Turbo"
         Upgrades.BEARINGS -> "Kaygan Rulmanlar"
         Upgrades.FLYWHEEL -> "Volan Çekirdek"
@@ -179,7 +183,8 @@ object TurkishText : GameText {
     override fun upgradeTagline(id: String): String = when (id) {
         Upgrades.GEAR -> "Kapaktaki büyük dişli, hızlı bir parmak turunu daha çok top turuna çevirir. Yavaş turlar bire bir kalır."
         Upgrades.GRIP -> "Top parmağını daha çabuk yakalar; tutunca daha sert frenler."
-        Upgrades.OVERDRIVE -> "Basılı tut: anında hız. Şarj tutarken azalır, bırakınca dolar; boşken tutmaya devam edersen yavaşlatır."
+        Upgrades.TRACTION -> "Daha tutucu yüzey. Topun üstünden kaydırmak topu daha çok iter; toptan yavaş bir kaydırma bile frenlemek yerine yardım eder."
+        Upgrades.OVERDRIVE -> "Topu üstten ve alttan sık. Daha çok sıkarsan daha çok itiş; hızlı sıkış ekstra vuruş katar. Yakıt sıkarken biter ve ancak bekleme süresinden sonra dolar."
         Upgrades.BEARINGS -> "Yağlanmış rulmanlar. Daha az sürtünme; top hızını çok daha uzun korur."
         Upgrades.FLYWHEEL -> "Ağır çekirdek momentumu saklar; top çok daha uzun döner."
         Upgrades.MOTOR -> "Kapaktaki minik motor sen dinlenirken topu döndürür."
@@ -194,7 +199,8 @@ object TurkishText : GameText {
     override fun upgradeEffect(id: String, level: Int): String = when (id) {
         Upgrades.GEAR -> "Hızlı daireler x${n2(Stats.gearRatio(level))}"
         Upgrades.GRIP -> "Tutuş %${n0(Stats.gripAccel(level) / Stats.gripAccel(0) * 100)}"
-        Upgrades.OVERDRIVE -> "${n1(Stats.turboCapacity(level))} sn turbo, ${n0(Stats.turboRefill(level))} sn dolum, limit x${n1(Stats.turboCapMultiplier(level))}"
+        Upgrades.TRACTION -> "Kaydırma x${n2(Stats.tractionRatio(level))}"
+        Upgrades.OVERDRIVE -> "${n1(Stats.turboCapacity(level))} sn yakıt, ${n1(Stats.turboCooldown(level))} sn bekleme, ${n1(Stats.turboRefill(level))} sn dolum, limit x${n1(Stats.turboCapMultiplier(level))}"
         Upgrades.BEARINGS -> "Sürtünme %${n0(Stats.dragPercent(level))}"
         Upgrades.FLYWHEEL -> "Eylemsizlik x${n2(Stats.inertia(level))}"
         Upgrades.MOTOR -> if (level == 0) "Motor yok" else "Boşta ${n0(Stats.motorRpm(level))} RPM"

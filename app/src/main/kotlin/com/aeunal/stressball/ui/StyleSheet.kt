@@ -109,20 +109,16 @@ fun StyleSheet(
             Modifier.padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            val effective = language ?: DEFAULT_LANGUAGE
             FilterChip(
-                selected = language == null,
-                onClick = { onLanguage(null) },
-                label = { Text(stringResource(R.string.language_system)) },
-            )
-            FilterChip(
-                selected = language == Language.EN,
-                onClick = { onLanguage(Language.EN) },
-                label = { Text(stringResource(R.string.language_en)) },
-            )
-            FilterChip(
-                selected = language == Language.TR,
+                selected = effective == Language.TR,
                 onClick = { onLanguage(Language.TR) },
                 label = { Text(stringResource(R.string.language_tr)) },
+            )
+            FilterChip(
+                selected = effective == Language.EN,
+                onClick = { onLanguage(Language.EN) },
+                label = { Text(stringResource(R.string.language_en)) },
             )
         }
     }

@@ -42,6 +42,7 @@ object SaveCodec {
             zen = zen.coerceAtLeast(0),
             combo = combo.coerceAtLeast(0.0).finiteOr(0.0),
             turboCharge = turboCharge.finiteOr(1.0).coerceIn(0.0, 1.0),
+            turboCooldown = turboCooldown.finiteOr(0.0).coerceAtLeast(0.0),
             achievements = achievements.filter { it in Achievements.byId }.toSet(),
             ownedCosmetics = owned,
             equipped = equippedClean,

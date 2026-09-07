@@ -7,7 +7,7 @@ data class GameView(
     val rpm: Double,
     /** +1 clockwise seen from above the cap, -1 counter-clockwise. */
     val direction: Int,
-    /** Cap in effect right now (boosted while the turbo is active). */
+    /** Cap in effect right now (raised while the turbo is active). */
     val rpmCap: Double,
     /** Cap without the turbo. */
     val baseRpmCap: Double,
@@ -18,11 +18,15 @@ data class GameView(
     val petalMultiplier: Double,
     val comboMultiplier: Double,
     val zenMultiplier: Double,
-    /** 0..1 */
+    /** Fuel, 0..1 */
     val turboCharge: Double,
-    /** Held with charge left: thrust, raised cap, doubled income. */
+    /** Seconds before fuel starts refilling. 0 while refilling or full. */
+    val turboCooldown: Double,
+    /** How hard the ball is being squeezed, 0..1. Drives the disc morph. */
+    val turboWeight: Double,
+    /** Squeezed with fuel left: thrust, raised cap, extra income. */
     val turboBoosting: Boolean,
-    /** Held with an empty charge: braking. */
+    /** Squeezed with empty fuel: braking. */
     val turboOverheating: Boolean,
     val turboCapMultiplier: Double,
     val motorRpm: Double,

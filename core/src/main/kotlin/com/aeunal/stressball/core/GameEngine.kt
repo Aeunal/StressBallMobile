@@ -14,6 +14,7 @@ import kotlin.math.sign
  *
  * Inputs ([setFinger], [setTurbo]) are "current controls": set them whenever
  * they change and the next ticks use them. They are not persisted.
+ * The formulas behind every step are documented in [Stats].
  *
  * Not thread-safe: drive it from a single thread (the UI's game loop).
  */
@@ -25,11 +26,24 @@ class GameEngine(initial: GameState = GameState()) {
     var fingerTouching: Boolean = false
         private set
 
-    /** Signed finger angular velocity around the ball, rad/s. Only meaningful while touching. */
-    var fingerOmega: Double = 0.0
+    /** Finger angular velocity around the ball centre (rad/s, signed). See [FingerSample.twistOmega]. */
+    var fingerTwist: Double = 0.0
         private set
 
-    var turboHeld: Boolean = false
+    /** Ball speed implied by the finger dragging the face (rad/s, signed). See [FingerSample.dragOmega]. */
+    var fingerDrag: Double = 0.0
+        private set
+
+    /** 0 = straight stroke across the face, 1 = circle around the centre. */
+    var fingerCircularity: Double = 1.0
+        private set
+
+    /** How hard the ball is squeezed, 0..1. */
+    var turboWeight: Double = 0.0
+        private set
+
+    /** How fast the squeeze is tightening (1/s, never negative). */
+    var squeezeRate: Double = 0.0
         private set
 
     // --------------------------------------------------------------------
@@ -38,19 +52,38 @@ class GameEngine(initial: GameState = GameState()) {
 
     /**
      * Reports the finger. While [touching], the ball is gripped: it chases the
-     * finger's speed, which also means a finger held still brakes the ball.
-     * [omega] is the finger's angular velocity around the ball centre in rad/s,
-     * positive for a clockwise circle on screen.
+     * speed the finger implies, which also means a finger held still brakes
+     * the ball. A circling finger ([twistOmega], weighted by [circularity])
+     * twists it like the cap; a stroke across the face ([dragOmega]) rolls it
+     * like a real ball.
      */
-    fun setFinger(touching: Boolean, omega: Double = 0.0) {
+    fun setFinger(
+        touching: Boolean,
+        twistOmega: Double = 0.0,
+        dragOmega: Double = 0.0,
+        circularity: Double = 1.0,
+    ) {
         fingerTouching = touching
-        fingerOmega = if (touching && omega.isFinite()) omega else 0.0
+        fingerTwist = if (touching && twistOmega.isFinite()) twistOmega else 0.0
+        fingerDrag = if (touching && dragOmega.isFinite()) dragOmega else 0.0
+        fingerCircularity = if (circularity.isFinite()) circularity.coerceIn(0.0, 1.0) else 1.0
     }
 
-    /** Hold-to-boost. Thrust while charge remains, brake once it is empty, refill when released. */
-    fun setTurbo(held: Boolean) {
-        turboHeld = held
+    /**
+     * Squeeze the ball. [weight] 0..1 scales thrust, fuel burn, the raised
+     * cap and the income bonus; [squeezeRate] (1/s, how fast the pinch is
+     * closing) adds a kick on top.
+     */
+    fun setTurbo(weight: Double, squeezeRate: Double = 0.0) {
+        turboWeight = if (weight.isFinite()) weight.coerceIn(0.0, 1.0) else 0.0
+        this.squeezeRate = if (squeezeRate.isFinite()) max(0.0, squeezeRate) else 0.0
     }
+
+    /** Speed the finger is asking for right now. */
+    fun fingerTarget(): Double = Stats.fingerTarget(
+        fingerTwist, fingerDrag, fingerCircularity,
+        state.level(Upgrades.GEAR), state.level(Upgrades.TRACTION),
+    )
 
     /** Buys one level of [id] if affordable and below max level. */
     fun buy(id: String): Boolean {
@@ -125,9 +158,8 @@ class GameEngine(initial: GameState = GameState()) {
     /** Replaces the whole state, e.g. after loading a save. */
     fun load(newState: GameState) {
         state = newState
-        fingerTouching = false
-        fingerOmega = 0.0
-        turboHeld = false
+        setFinger(false)
+        setTurbo(0.0)
     }
 
     fun markSaved(epochMs: Long) {
@@ -161,30 +193,39 @@ class GameEngine(initial: GameState = GameState()) {
 
         var omega = s.omega
         var charge = s.turboCharge
-        val boosting = turboHeld && charge > 0.0
-        val overheating = turboHeld && charge <= 0.0
+        var cooldown = s.turboCooldown
+        val w = turboWeight
+        val boosting = w > 0.0 && charge > 0.0
 
-        // 1. Finger grip: chase the geared finger speed in either direction,
-        //    limited by how hard the grip can push or brake.
+        // 1. Finger: a slipping clutch. Pull towards the implied speed at the
+        //    grip rate, but never harder than the rubber can transmit.
         if (fingerTouching) {
-            val target = Stats.gearedTarget(fingerOmega, s.level(Upgrades.GEAR))
+            val target = fingerTarget()
             val k = min(1.0, Stats.gripRate(s.level(Upgrades.GRIP)) * dt)
             val limit = Stats.gripAccel(s.level(Upgrades.GRIP)) * dt
             omega += ((target - omega) * k).coerceIn(-limit, limit)
         }
 
-        // 2. Turbo.
-        if (boosting) {
-            val dir = if (omega < 0.0) -1.0 else 1.0
-            omega += dir * Stats.turboAccel(turboLevel) * dt
-            charge = max(0.0, charge - dt / Stats.turboCapacity(turboLevel))
-        } else if (overheating) {
-            omega = towardsZero(omega, Stats.TURBO_OVERHEAT_BRAKE * dt)
+        // 2. Turbo: thrust and fuel burn scale with the squeeze; a fast pinch
+        //    kicks extra. Squeezing an empty tank brakes. Fuel only refills
+        //    after a cooldown that every squeeze restarts.
+        if (w > 0.0) {
+            if (charge > 0.0) {
+                val dir = if (omega < 0.0) -1.0 else 1.0
+                val thrust = Stats.turboAccel(turboLevel) * w + Stats.turboSqueezeGain(turboLevel) * squeezeRate
+                omega += dir * thrust * dt
+                charge = max(0.0, charge - w * dt / Stats.turboCapacity(turboLevel))
+            } else {
+                omega = towardsZero(omega, Stats.TURBO_OVERHEAT_BRAKE * w * dt)
+            }
+            cooldown = Stats.turboCooldown(turboLevel)
+        } else if (cooldown > 0.0) {
+            cooldown = max(0.0, cooldown - dt)
         } else {
             charge = min(1.0, charge + dt / Stats.turboRefill(turboLevel))
         }
 
-        // 3. Friction.
+        // 3. Bearing friction: Coulomb + viscous, divided by inertia.
         val beforeFriction = omega
         val decel = Stats.viscousFriction(bearings, flywheel) * abs(omega) + Stats.constantFriction(bearings, flywheel)
         omega = towardsZero(omega, decel * dt)
@@ -199,14 +240,11 @@ class GameEngine(initial: GameState = GameState()) {
             omega = dir * min(motorOmega, max(abs(omega), ramped))
         }
 
-        // 5. Speed limit. Boosting raises the cap; once released, speed above
-        //    the base cap bleeds off instead of snapping.
-        val ceiling = if (boosting) {
-            baseCap * Stats.turboCapMultiplier(turboLevel)
-        } else {
-            val excess = abs(s.omega) - baseCap
-            if (excess < OVER_CAP_SNAP) baseCap else baseCap + excess * (1.0 - min(1.0, Stats.OVER_CAP_DRAG * dt))
-        }
+        // 5. Speed limit. The squeeze raises the cap in proportion; speed left
+        //    above the current cap bleeds off instead of snapping.
+        val boostedCap = if (boosting) baseCap * (1.0 + w * (Stats.turboCapMultiplier(turboLevel) - 1.0)) else baseCap
+        val excess = abs(s.omega) - boostedCap
+        val ceiling = if (excess < OVER_CAP_SNAP) boostedCap else boostedCap + excess * (1.0 - min(1.0, Stats.OVER_CAP_DRAG * dt))
         if (abs(omega) > ceiling) omega = sign(omega) * ceiling
 
         // 6. Resonance combo.
@@ -221,12 +259,13 @@ class GameEngine(initial: GameState = GameState()) {
 
         // 7. Income.
         val revolutions = abs(omega) / TWO_PI * dt
-        val earned = revolutions * incomePerRevolution(s, rpm, combo, boosting)
+        val earned = revolutions * incomePerRevolution(s, rpm, combo, if (boosting) w else 0.0)
 
         state = s.copy(
             omega = omega,
             combo = combo,
             turboCharge = charge,
+            turboCooldown = cooldown,
             points = s.points + earned,
             pointsThisRun = s.pointsThisRun + earned,
             totalPointsEarned = s.totalPointsEarned + earned,
@@ -241,14 +280,14 @@ class GameEngine(initial: GameState = GameState()) {
     private fun towardsZero(value: Double, amount: Double): Double =
         if (abs(value) <= amount) 0.0 else value - sign(value) * amount
 
-    private fun incomePerRevolution(s: GameState, rpm: Double, combo: Double, boosting: Boolean): Double =
-        Stats.pointsPerRev(s.level(Upgrades.COUNTER)) * totalMultiplier(s, rpm, combo, boosting)
+    private fun incomePerRevolution(s: GameState, rpm: Double, combo: Double, boostWeight: Double): Double =
+        Stats.pointsPerRev(s.level(Upgrades.COUNTER)) * totalMultiplier(s, rpm, combo, boostWeight)
 
-    private fun totalMultiplier(s: GameState, rpm: Double, combo: Double, boosting: Boolean): Double {
+    private fun totalMultiplier(s: GameState, rpm: Double, combo: Double, boostWeight: Double): Double {
         val petals = if (petalsOpen(s, rpm)) Stats.petalMultiplier(s.level(Upgrades.PETALS)) else 1.0
         val resonance = 1.0 + combo
         val zen = Stats.zenMultiplier(s.zen)
-        val turbo = if (boosting) Stats.TURBO_INCOME_MULT else 1.0
+        val turbo = 1.0 + boostWeight * (Stats.TURBO_INCOME_MULT - 1.0)
         return petals * resonance * zen * turbo
     }
 
@@ -288,13 +327,14 @@ class GameEngine(initial: GameState = GameState()) {
         val motorRpm = Stats.motorRpm(state.level(Upgrades.MOTOR))
         val motorOmega = rpmToOmega(motorRpm)
         val revolutions = motorOmega / TWO_PI * credited
-        val earned = revolutions * incomePerRevolution(state, motorRpm, 0.0, false) * efficiency
+        val earned = revolutions * incomePerRevolution(state, motorRpm, 0.0, 0.0) * efficiency
 
         val dir = if (state.omega < 0.0) -1.0 else 1.0
         state = state.copy(
             omega = dir * motorOmega,
             combo = 0.0,
             turboCharge = 1.0,
+            turboCooldown = 0.0,
             points = state.points + earned,
             pointsThisRun = state.pointsThisRun + earned,
             totalPointsEarned = state.totalPointsEarned + earned,
@@ -313,25 +353,28 @@ class GameEngine(initial: GameState = GameState()) {
         val s = state
         val rpm = s.rpm
         val turboLevel = s.level(Upgrades.OVERDRIVE)
-        val boosting = turboHeld && s.turboCharge > 0.0
+        val w = turboWeight
+        val boosting = w > 0.0 && s.turboCharge > 0.0
         val baseCap = Stats.rpmCap(s.level(Upgrades.COOLING))
-        val perRev = incomePerRevolution(s, rpm, s.combo, boosting)
+        val perRev = incomePerRevolution(s, rpm, s.combo, if (boosting) w else 0.0)
         return GameView(
             state = s,
             rpm = rpm,
             direction = s.direction,
-            rpmCap = if (boosting) baseCap * Stats.turboCapMultiplier(turboLevel) else baseCap,
+            rpmCap = if (boosting) baseCap * (1.0 + w * (Stats.turboCapMultiplier(turboLevel) - 1.0)) else baseCap,
             baseRpmCap = baseCap,
             pointsPerSecond = abs(s.omega) / TWO_PI * perRev,
             pointsPerRev = perRev,
-            totalMultiplier = totalMultiplier(s, rpm, s.combo, boosting),
+            totalMultiplier = totalMultiplier(s, rpm, s.combo, if (boosting) w else 0.0),
             petalsOpen = petalsOpen(s, rpm),
             petalMultiplier = Stats.petalMultiplier(s.level(Upgrades.PETALS)),
             comboMultiplier = 1.0 + s.combo,
             zenMultiplier = Stats.zenMultiplier(s.zen),
             turboCharge = s.turboCharge,
+            turboCooldown = s.turboCooldown,
+            turboWeight = w,
             turboBoosting = boosting,
-            turboOverheating = turboHeld && s.turboCharge <= 0.0,
+            turboOverheating = w > 0.0 && s.turboCharge <= 0.0,
             turboCapMultiplier = Stats.turboCapMultiplier(turboLevel),
             motorRpm = Stats.motorRpm(s.level(Upgrades.MOTOR)),
             zenOnReset = zenOnReset(),

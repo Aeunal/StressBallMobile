@@ -28,6 +28,7 @@ data class UpgradeDef(
 object Upgrades {
     const val GEAR = "gear"
     const val GRIP = "grip"
+    const val TRACTION = "traction"
     const val BEARINGS = "bearings"
     const val FLYWHEEL = "flywheel"
     const val MOTOR = "motor"
@@ -42,6 +43,7 @@ object Upgrades {
     val all: List<UpgradeDef> = listOf(
         UpgradeDef(GEAR, UpgradeCategory.MANUAL, baseCost = 15.0, growth = 1.6, maxLevel = 20),
         UpgradeDef(GRIP, UpgradeCategory.MANUAL, baseCost = 25.0, growth = 1.55, maxLevel = 20),
+        UpgradeDef(TRACTION, UpgradeCategory.MANUAL, baseCost = 20.0, growth = 1.6, maxLevel = 20),
         UpgradeDef(OVERDRIVE, UpgradeCategory.MANUAL, baseCost = 300.0, growth = 2.2, maxLevel = 8),
         UpgradeDef(BEARINGS, UpgradeCategory.IDLE, baseCost = 40.0, growth = 1.7, maxLevel = 30),
         UpgradeDef(FLYWHEEL, UpgradeCategory.IDLE, baseCost = 150.0, growth = 1.75, maxLevel = 20),

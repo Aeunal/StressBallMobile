@@ -174,67 +174,64 @@ class GameEngineTest {
     }
 
     // ------------------------------------------------------------------
-    // Turbo
+    // Swipes across the face
     // ------------------------------------------------------------------
 
     @Test
-    fun `holding turbo adds momentum fast, raises the cap and drains the charge`() {
-        val e = GameEngine(GameState(omega = rpmToOmega(100.0)))
-        e.setTurbo(true)
-        run(e, 1.0)
-        assertTrue(e.view().rpm > 400.0, "turbo should add hundreds of RPM in a second, got ${e.view().rpm}")
-        assertTrue(e.view().turboBoosting)
-        assertTrue(e.state.turboCharge < 1.0 && e.state.turboCharge > 0.0)
-        run(e, 1.0) // 2 s held in total, under the 2.5 s stock capacity
-        val rpm = e.view().rpm
-        assertTrue(rpm > Stats.rpmCap(0), "boost should exceed the base cap, got $rpm")
-        assertTrue(rpm <= Stats.rpmCap(0) * Stats.turboCapMultiplier(0) + 1e-6)
-        assertEquals(Stats.rpmCap(0) * Stats.turboCapMultiplier(0), e.view().rpmCap, 1e-9)
+    fun `a straight swipe drives the ball by surface drag, a circle by twist`() {
+        // Same numbers, opposite signs: a rightward stroke above the centre sweeps
+        // clockwise (twist +) but rolls the front face right (drag -).
+        val swipe = GameEngine()
+        swipe.setFinger(true, twistOmega = 8.0, dragOmega = -8.0, circularity = 0.0)
+        run(swipe, 2.0)
+        assertTrue(swipe.state.omega < -3.0, "swipe should roll the ball negative, got ${swipe.state.omega}")
+
+        val circle = GameEngine()
+        circle.setFinger(true, twistOmega = 8.0, dragOmega = -8.0, circularity = 1.0)
+        run(circle, 2.0)
+        assertTrue(circle.state.omega > 3.0, "circle should twist the ball positive, got ${circle.state.omega}")
+
+        val mixed = GameEngine()
+        mixed.setFinger(true, twistOmega = 8.0, dragOmega = -8.0, circularity = 0.5)
+        run(mixed, 2.0)
+        assertEquals(0.0, mixed.state.omega, 0.5, "an even blend cancels out")
     }
 
     @Test
-    fun `turbo income multiplier applies only while boosting`() {
-        val e = GameEngine(GameState(omega = rpmToOmega(60.0)))
-        val idle = e.view().pointsPerSecond
-        e.setTurbo(true)
-        assertEquals(idle * Stats.TURBO_INCOME_MULT, e.view().pointsPerSecond, 1e-9)
-        e.setTurbo(false)
-        assertEquals(idle, e.view().pointsPerSecond, 1e-9)
+    fun `swiping with the spin speeds it up and against it slows it down`() {
+        val with = GameEngine(GameState(omega = -10.0, upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20)))
+        with.setFinger(true, dragOmega = -20.0, circularity = 0.0)
+        run(with, 1.0)
+        assertTrue(with.state.omega < -15.0, "faster swipe in the same direction adds speed: ${with.state.omega}")
+
+        val against = GameEngine(GameState(omega = -10.0, upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20)))
+        against.setFinger(true, dragOmega = 20.0, circularity = 0.0)
+        run(against, 1.0)
+        assertTrue(against.state.omega > 0.0, "swipe against the spin reverses it: ${against.state.omega}")
     }
 
     @Test
-    fun `holding turbo after it is empty slows the ball`() {
-        val e = GameEngine(GameState(omega = rpmToOmega(100.0), upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20)))
-        e.setTurbo(true)
-        run(e, Stats.turboCapacity(0) + 0.5)
-        assertEquals(0.0, e.state.turboCharge, 1e-9)
-        assertTrue(e.view().turboOverheating)
-        val peak = e.view().rpm
-        run(e, 1.0)
-        assertTrue(e.view().rpm < peak - 200, "overheating should brake hard: $peak -> ${e.view().rpm}")
-        assertEquals(0.0, e.state.turboCharge, 1e-9, "charge must not refill while held")
+    fun `a swipe slower than the ball brakes unless the tread over-rolls it`() {
+        val stock = GameEngine(GameState(omega = -20.0, upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20)))
+        stock.setFinger(true, dragOmega = -12.0, circularity = 0.0)
+        run(stock, 1.0)
+        assertTrue(abs(stock.state.omega) < 13.0, "slow swipe drags the ball down to its own speed: ${stock.state.omega}")
+
+        val tread = GameEngine(GameState(omega = -20.0, upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20, Upgrades.TRACTION to 4)))
+        tread.setFinger(true, dragOmega = -12.0, circularity = 0.0)
+        run(tread, 1.0)
+        assertEquals(-12.0 * Stats.tractionRatio(4), tread.state.omega, 0.5, "tread multiplies the implied speed")
+        assertTrue(abs(tread.state.omega) > 20.0, "so the same slow swipe now speeds it up")
     }
 
     @Test
-    fun `releasing turbo refills the charge and bleeds speed back to the cap`() {
-        val e = GameEngine(GameState(omega = rpmToOmega(100.0), upgrades = mapOf(Upgrades.BEARINGS to 30, Upgrades.FLYWHEEL to 20)))
-        e.setTurbo(true)
-        run(e, 2.0)
-        assertTrue(e.view().rpm > Stats.rpmCap(0))
-        e.setTurbo(false)
-        run(e, 0.1)
-        assertTrue(e.view().rpm > Stats.rpmCap(0), "speed above the cap should bleed off, not snap")
-        run(e, 3.0)
-        assertTrue(e.view().rpm <= Stats.rpmCap(0) + 1e-6)
-        run(e, Stats.turboRefill(0))
-        assertEquals(1.0, e.state.turboCharge, 1e-6)
-    }
-
-    @Test
-    fun `turbo upgrade lengthens the boost and shortens the refill`() {
-        assertTrue(Stats.turboCapacity(3) > Stats.turboCapacity(0))
-        assertTrue(Stats.turboRefill(3) < Stats.turboRefill(0))
-        assertTrue(Stats.turboCapMultiplier(3) > Stats.turboCapMultiplier(0))
+    fun `finger target blends twist and drag`() {
+        val e = GameEngine(GameState(upgrades = mapOf(Upgrades.GEAR to 2, Upgrades.TRACTION to 2)))
+        e.setFinger(true, twistOmega = 12.0, dragOmega = -4.0, circularity = 0.25)
+        val expected = 0.25 * Stats.gearedTarget(12.0, 2) + 0.75 * (-4.0) * Stats.tractionRatio(2)
+        assertEquals(expected, e.fingerTarget(), 1e-9)
+        e.setFinger(true, twistOmega = 12.0, dragOmega = -4.0, circularity = 3.0)
+        assertEquals(1.0, e.fingerCircularity)
     }
 
     // ------------------------------------------------------------------

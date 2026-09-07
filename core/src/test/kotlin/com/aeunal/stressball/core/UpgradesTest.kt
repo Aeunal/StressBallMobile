@@ -20,6 +20,8 @@ class UpgradesTest {
             assertTrue(Stats.gearRatio(l + 1) > Stats.gearRatio(l))
             assertTrue(Stats.gripRate(l + 1) > Stats.gripRate(l))
             assertTrue(Stats.gripAccel(l + 1) > Stats.gripAccel(l))
+            assertTrue(Stats.tractionRatio(l + 1) > Stats.tractionRatio(l))
+            assertTrue(Stats.turboCooldown(l + 1) < Stats.turboCooldown(l))
             assertTrue(Stats.viscousFriction(l + 1, 0) < Stats.viscousFriction(l, 0))
             assertTrue(Stats.constantFriction(l + 1, 0) < Stats.constantFriction(l, 0))
             assertTrue(Stats.constantFriction(0, l + 1) < Stats.constantFriction(0, l))

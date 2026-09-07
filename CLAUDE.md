@@ -12,15 +12,16 @@ upgrades and cosmetics. See README.md for the game design.
 
 - `core/` — pure Kotlin/JVM game engine. **All game rules live here.**
   - `GameState.kt` serializable save state (ids/fields are part of the save format). `omega` is signed.
-  - `Stats.kt` every balancing formula, including turbo and the effect-tier RPM thresholds.
+  - `Stats.kt` every balancing formula and the physical model (clutch-like finger, Coulomb + viscous bearings, weighted squeeze turbo), plus the effect-tier RPM thresholds.
+  - `SpinInput.kt` turns raw finger motion into twist / surface-drag speeds and a circularity weight; `GameEngine.setFinger()` blends them.
   - `Upgrades.kt` / `Cosmetics.kt` / `Achievements.kt` catalogues (ids only, no text).
   - `GameText.kt` every player-facing string tied to game content, in English and Turkish. Add a language here and in `app/src/main/res/values-<lang>/strings.xml`.
-  - `GameEngine.kt` the simulation: inputs `setFinger()`, `setTurbo()`; `tick(dt)`, `buy()`, `buyCosmetic()`, `equipCosmetic()`, `prestige()`, `applyOfflineProgress()`.
+  - `GameEngine.kt` the simulation: inputs `setFinger()`, `setTurbo(weight, squeezeRate)`; `tick(dt)`, `buy()`, `buyCosmetic()`, `equipCosmetic()`, `prestige()`, `applyOfflineProgress()`.
   - `SaveCodec.kt` JSON persistence, tolerant of unknown keys and out-of-range values.
   - Tests in `core/src/test`. Run with `./gradlew :core:test`.
 - `app/` — Android (Jetpack Compose, Material 3, DataStore).
   - `game/GameViewModel.kt` owns the engine, runs the 60 Hz loop in the foreground, autosaves (on an app-scoped coroutine so saves survive onStop).
-  - `ui/BallCanvas.kt` draws the ball, the disc morph and the tiered effects; `ui/SpinGesture.kt` turns finger circles into rad/s; `ui/AppLanguage.kt` applies the language override.
+  - `ui/BallCanvas.kt` draws the ball, the disc morph and the tiered effects; `ui/SpinGesture.kt` routes one finger to `SpinInput` and two fingers to the pinch turbo; `ui/AppLanguage.kt` applies the language (default Turkish).
   - UI chrome strings live in `res/values/strings.xml` and `res/values-tr/strings.xml`.
 
 ## Rules of thumb

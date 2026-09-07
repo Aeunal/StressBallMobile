@@ -36,8 +36,10 @@ data class GameState(
     val totalRevolutions: Double = 0.0,
     /** Resonance combo, 0..maxCombo. Builds while spinning fast. */
     val combo: Double = 0.0,
-    /** Turbo charge, 0 (empty) .. 1 (full). Depletes while the turbo is held. */
+    /** Turbo fuel, 0 (empty) .. 1 (full). Burns while the ball is squeezed. */
     val turboCharge: Double = 1.0,
+    /** Seconds before the turbo starts refilling again after use. */
+    val turboCooldown: Double = 0.0,
     /** Total seconds the game has been ticking. */
     val playTimeSeconds: Double = 0.0,
     /** Wall-clock time (epoch ms) of the last save; used for offline progress. */
@@ -60,7 +62,7 @@ data class GameState(
     val direction: Int get() = if (omega < 0.0) -1 else 1
 
     companion object {
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
     }
 }
 

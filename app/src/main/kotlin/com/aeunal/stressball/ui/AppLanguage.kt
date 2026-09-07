@@ -8,35 +8,32 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import com.aeunal.stressball.core.EnglishText
 import com.aeunal.stressball.core.GameText
 import com.aeunal.stressball.core.GameTexts
 import com.aeunal.stressball.core.Language
+import com.aeunal.stressball.core.TurkishText
 import java.util.Locale
 
 /** The engine's text in the language the UI is showing. */
-val LocalGameText = staticCompositionLocalOf<GameText> { EnglishText }
+val LocalGameText = staticCompositionLocalOf<GameText> { TurkishText }
 
-/** Language the device is set to, mapped to one the game ships (English otherwise). */
-fun deviceLanguage(): Language = Language.fromCode(Locale.getDefault().language) ?: Language.EN
+/** The language shown when the player has not chosen one. */
+val DEFAULT_LANGUAGE: Language = Language.TR
 
 /**
- * Applies an in-app language choice. With [override] null the device language
- * is used. String resources are re-resolved through a context configured for
- * the chosen locale, and [LocalGameText] follows the same choice.
+ * Applies the in-app language. With [override] null the game's default
+ * ([DEFAULT_LANGUAGE]) is used regardless of the device locale. String
+ * resources are re-resolved through a context configured for the chosen
+ * locale, and [LocalGameText] follows the same choice.
  */
 @Composable
 fun ProvideAppLanguage(override: Language?, content: @Composable () -> Unit) {
     val base = LocalContext.current
-    val effective = override ?: deviceLanguage()
-    val context = remember(base, override) {
-        if (override == null) {
-            base
-        } else {
-            val config = Configuration(base.resources.configuration)
-            config.setLocale(Locale.forLanguageTag(override.code))
-            base.createConfigurationContext(config)
-        }
+    val effective = override ?: DEFAULT_LANGUAGE
+    val context = remember(base, effective) {
+        val config = Configuration(base.resources.configuration)
+        config.setLocale(Locale.forLanguageTag(effective.code))
+        base.createConfigurationContext(config)
     }
     CompositionLocalProvider(
         LocalContext provides context,

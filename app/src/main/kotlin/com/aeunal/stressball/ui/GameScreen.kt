@@ -1,14 +1,11 @@
 package com.aeunal.stressball.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,17 +34,15 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,8 +55,12 @@ import com.aeunal.stressball.core.NumberFormat
 import com.aeunal.stressball.game.GameEvent
 import com.aeunal.stressball.game.GameViewModel
 import com.aeunal.stressball.ui.theme.BallColors
+import kotlin.math.min
 
 private enum class Sheet { NONE, UPGRADES, STYLE, STATS }
+
+/** Must match the radius [BallCanvas] draws with, so touch geometry lines up with the picture. */
+const val BALL_RADIUS_FRACTION = 0.36f
 
 @Composable
 fun GameScreen(viewModel: GameViewModel) {
@@ -82,6 +81,7 @@ private fun GameContent(viewModel: GameViewModel, language: Language?) {
     var sheet by remember { mutableStateOf(Sheet.NONE) }
     var offlineDialog by remember { mutableStateOf<GameEvent.Offline?>(null) }
     var prestigeDialog by remember { mutableStateOf(false) }
+    var ballRadius by remember { mutableFloatStateOf(0f) }
     val context = LocalContext.current
     val text = LocalGameText.current
 
@@ -118,24 +118,28 @@ private fun GameContent(viewModel: GameViewModel, language: Language?) {
             Header(view)
             Spacer(Modifier.height(8.dp))
             RpmMeter(view)
+            Spacer(Modifier.height(6.dp))
+            TurboBar(view)
 
             BallCanvas(
                 view = view,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .onSizeChanged { ballRadius = min(it.width, it.height) * BALL_RADIUS_FRACTION }
                     .spinGesture(
+                        ballRadius = { ballRadius },
                         onDown = viewModel::onFingerDown,
                         onMove = viewModel::onFingerMove,
                         onUp = viewModel::onFingerUp,
+                        onPinch = viewModel::onPinch,
+                        onPinchEnd = viewModel::onPinchEnd,
                     ),
             )
 
             Hint(view)
             Spacer(Modifier.height(12.dp))
             ActionBar(
-                view = view,
-                onTurbo = viewModel::setTurboHeld,
                 onUpgrades = { sheet = Sheet.UPGRADES },
                 onStyle = { sheet = Sheet.STYLE },
                 onStats = { sheet = Sheet.STATS },
@@ -305,6 +309,46 @@ private fun RpmMeter(view: GameView) {
     }
 }
 
+/**
+ * Fuel gauge for the squeeze turbo: fills with fuel, drains while the ball is
+ * pinched, sits grey through the cooldown, then refills.
+ */
+@Composable
+private fun TurboBar(view: GameView) {
+    val charge = view.turboCharge.toFloat().coerceIn(0f, 1f)
+    val incomeMult = 1.0 + view.turboWeight * (com.aeunal.stressball.core.Stats.TURBO_INCOME_MULT - 1.0)
+    val status = when {
+        view.turboBoosting -> stringResource(R.string.turbo_active, NumberFormat.compact(incomeMult, 2))
+        view.turboOverheating -> stringResource(R.string.turbo_empty)
+        view.turboCooldown > 0.0 -> stringResource(R.string.turbo_cooldown, NumberFormat.duration(view.turboCooldown))
+        charge < 1f -> stringResource(R.string.turbo_refilling)
+        else -> stringResource(R.string.turbo_ready)
+    }
+    val color = when {
+        view.turboOverheating -> BallColors.Heat
+        view.turboBoosting -> BallColors.Overdrive
+        view.turboCooldown > 0.0 -> MaterialTheme.colorScheme.outline
+        else -> BallColors.Red
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                stringResource(R.string.turbo_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(status, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { charge },
+            modifier = Modifier.fillMaxWidth().height(4.dp),
+            color = color,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun StatusPill(text: String, color: Color) {
     Text(
@@ -321,10 +365,12 @@ private fun StatusPill(text: String, color: Color) {
 @Composable
 private fun Hint(view: GameView) {
     val revolutions = view.state.totalRevolutions
+    val idle = !view.fingerTouching && view.turboWeight == 0.0
     val message = when {
         revolutions < 30 -> stringResource(R.string.hint_draw_circles)
         view.fingerTouching && view.rpm < 5 -> stringResource(R.string.hint_keep_circling)
-        !view.fingerTouching && view.rpm > 200 && revolutions < 400 -> stringResource(R.string.hint_hold_to_brake)
+        idle && view.rpm > 200 && revolutions < 400 -> stringResource(R.string.hint_hold_to_brake)
+        idle && revolutions in 400.0..1500.0 -> stringResource(R.string.hint_pinch_turbo)
         else -> ""
     }
     Text(
@@ -338,8 +384,6 @@ private fun Hint(view: GameView) {
 
 @Composable
 private fun ActionBar(
-    view: GameView,
-    onTurbo: (Boolean) -> Unit,
     onUpgrades: () -> Unit,
     onStyle: () -> Unit,
     onStats: () -> Unit,
@@ -349,75 +393,18 @@ private fun ActionBar(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TurboButton(view = view, onHold = onTurbo, modifier = Modifier.weight(1f))
-        FilledTonalButton(onClick = onUpgrades, modifier = Modifier.height(56.dp)) {
+        FilledTonalButton(onClick = onUpgrades, modifier = Modifier.weight(1f).height(56.dp)) {
             Icon(Icons.Filled.Build, contentDescription = null)
             Spacer(Modifier.width(6.dp))
             Text(stringResource(R.string.upgrades_button))
         }
         FilledTonalButton(onClick = onStyle, modifier = Modifier.height(56.dp)) {
-            Icon(Icons.Filled.Star, contentDescription = stringResource(R.string.style_button))
+            Icon(Icons.Filled.Star, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.style_button))
         }
         FilledTonalButton(onClick = onStats, modifier = Modifier.height(56.dp)) {
             Icon(Icons.Filled.Info, contentDescription = stringResource(R.string.stats_button))
         }
     }
-}
-
-/**
- * Hold-to-boost. The fill shows the remaining charge: it drains while held,
- * refills when released, and turns hot when held empty.
- */
-@Composable
-private fun TurboButton(view: GameView, onHold: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    val haptics = LocalHapticFeedback.current
-    val charge = view.turboCharge.toFloat().coerceIn(0f, 1f)
-    val fill = when {
-        view.turboOverheating -> BallColors.Heat
-        view.turboBoosting -> BallColors.Overdrive
-        else -> BallColors.Red
-    }
-    val label = if (view.turboOverheating) stringResource(R.string.turbo_empty) else stringResource(R.string.turbo_button)
-
-    Box(
-        modifier = modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onHold(true)
-                        try {
-                            tryAwaitRelease()
-                        } finally {
-                            onHold(false)
-                        }
-                    },
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        ChargeFill(fraction = charge, color = fill)
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, fontWeight = FontWeight.Bold, color = Color.White)
-            Text(
-                stringResource(R.string.turbo_hold_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.75f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun BoxScope.ChargeFill(fraction: Float, color: Color) {
-    Box(
-        Modifier
-            .fillMaxHeight()
-            .fillMaxWidth(fraction)
-            .align(Alignment.CenterStart)
-            .background(color.copy(alpha = 0.85f)),
-    )
 }

@@ -85,9 +85,11 @@ fun BallCanvas(
         }
     }
 
+    // The disc morph follows the squeeze itself, so the ball flattens exactly
+    // as far as the fingers close, with a little spring so it feels like rubber.
     val squash by animateFloatAsState(
-        targetValue = if (view.turboBoosting) 1f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+        targetValue = view.turboWeight.toFloat().coerceIn(0f, 1f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "squash",
     )
     val petalOpen by animateFloatAsState(

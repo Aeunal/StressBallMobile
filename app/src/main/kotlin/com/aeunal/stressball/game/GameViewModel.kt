@@ -3,6 +3,7 @@ package com.aeunal.stressball.game
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aeunal.stressball.core.FingerSample
 import com.aeunal.stressball.core.GameEngine
 import com.aeunal.stressball.core.GameState
 import com.aeunal.stressball.core.GameView
@@ -53,7 +54,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _events = MutableStateFlow<List<GameEvent>>(emptyList())
     val events: StateFlow<List<GameEvent>> = _events.asStateFlow()
 
-    /** In-app language override, null = device language. */
+    /** In-app language override, null = the game's default (Turkish). */
     val language: StateFlow<Language?> = repository.language
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -63,9 +64,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Finger state. Touch events only arrive while the finger moves, so a
     // finger that stops moving is detected by its samples going stale.
     private var fingerDown = false
-    private var fingerOmega = 0.0
+    private var twist = 0.0
+    private var drag = 0.0
+    private var circularity = 1.0
     private var lastMoveNanos = 0L
-    private var turboHeld = false
+
+    // Pinch state. The squeeze rate is the positive derivative of the weight.
+    private var pinchWeight = 0.0
+    private var squeezeRate = 0.0
+    private var lastPinchNanos = 0L
 
     private var lastAutosaveNanos = 0L
 
@@ -92,7 +99,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         loopJob?.cancel()
         loopJob = null
         onFingerUp()
-        setTurboHeld(false)
+        onPinchEnd()
         saveNow()
     }
 
@@ -112,11 +119,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (fingerDown) {
                     val moving = now - lastMoveNanos < MOVE_HOLD_NANOS
-                    engine.setFinger(true, if (moving) fingerOmega else 0.0)
+                    if (moving) engine.setFinger(true, twist, drag, circularity) else engine.setFinger(true)
                 } else {
                     engine.setFinger(false)
                 }
-                engine.setTurbo(turboHeld)
+                val squeezing = now - lastPinchNanos < MOVE_HOLD_NANOS
+                engine.setTurbo(pinchWeight, if (squeezing) squeezeRate else 0.0)
 
                 val before = engine.state
                 engine.tick(dt)
@@ -136,34 +144,57 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onFingerDown() {
         fingerDown = true
-        fingerOmega = 0.0
+        twist = 0.0
+        drag = 0.0
+        circularity = 1.0
         lastMoveNanos = 0L
-        engine.setFinger(true, 0.0)
+        engine.setFinger(true)
         _view.value = engine.view()
     }
 
-    /**
-     * Called by the spin gesture with the finger's angular velocity around
-     * the ball centre in rad/s (signed, clockwise positive). Samples are
-     * lightly smoothed to hide touch sampling jitter.
-     */
-    fun onFingerMove(omega: Double) {
-        if (!omega.isFinite() || !fingerDown) return
-        fingerOmega = if (lastMoveNanos == 0L) omega else fingerOmega * 0.5 + omega * 0.5
+    /** A motion sample from the spin gesture. Lightly smoothed to hide touch jitter. */
+    fun onFingerMove(sample: FingerSample) {
+        if (!fingerDown) return
+        if (!sample.twistOmega.isFinite() || !sample.dragOmega.isFinite()) return
+        if (lastMoveNanos == 0L) {
+            twist = sample.twistOmega
+            drag = sample.dragOmega
+            circularity = sample.circularity
+        } else {
+            twist = twist * 0.5 + sample.twistOmega * 0.5
+            drag = drag * 0.5 + sample.dragOmega * 0.5
+            circularity = circularity * 0.7 + sample.circularity * 0.3
+        }
         lastMoveNanos = System.nanoTime()
     }
 
     fun onFingerUp() {
         fingerDown = false
-        fingerOmega = 0.0
         lastMoveNanos = 0L
         engine.setFinger(false)
         _view.value = engine.view()
     }
 
-    fun setTurboHeld(held: Boolean) {
-        turboHeld = held
-        engine.setTurbo(held)
+    /** Squeeze weight 0..1 from the pinch gesture. */
+    fun onPinch(weight: Float) {
+        val w = weight.toDouble().coerceIn(0.0, 1.0)
+        val now = System.nanoTime()
+        if (lastPinchNanos != 0L) {
+            val dt = (now - lastPinchNanos) / 1e9
+            if (dt > 0.0) {
+                val rate = ((w - pinchWeight) / dt).coerceAtLeast(0.0)
+                squeezeRate = squeezeRate * 0.5 + rate * 0.5
+            }
+        }
+        pinchWeight = w
+        lastPinchNanos = now
+    }
+
+    fun onPinchEnd() {
+        pinchWeight = 0.0
+        squeezeRate = 0.0
+        lastPinchNanos = 0L
+        engine.setTurbo(0.0)
         _view.value = engine.view()
     }
 
@@ -230,7 +261,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val FRAME_MS = 16L
-        /** A finger with no movement sample for this long counts as held still. */
+        /** A finger with no movement sample for this long counts as held still (or a pinch as not tightening). */
         const val MOVE_HOLD_NANOS = 80_000_000L
         const val AUTOSAVE_NANOS = 5_000_000_000L
     }
