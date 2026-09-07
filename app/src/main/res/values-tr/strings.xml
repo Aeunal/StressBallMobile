@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stres Topu</string>
+
+    <!-- Hints under the ball -->
+    <string name="hint_draw_circles">Döndürmek için topun üstünde daire çiz</string>
+    <string name="hint_keep_circling">Çizmeye devam et. Hızlı daire, daha çok RPM</string>
+    <string name="hint_hold_to_brake">Frenlemek için topu tut</string>
+
+    <!-- Header / meter -->
+    <string name="rate_format">%1$s / sn  •  x%2$s</string>
+    <string name="zen_label">Zen</string>
+    <string name="rpm_format">%1$s RPM</string>
+    <string name="cap_format">en fazla %1$s</string>
+    <string name="best_format">rekor %1$s</string>
+    <string name="badge_petals">Kabuk açık x%1$s</string>
+    <string name="badge_resonance">Rezonans x%1$s</string>
+    <string name="badge_turbo">TURBO x2</string>
+    <string name="badge_overheat">AŞIRI ISINMA</string>
+    <string name="badge_motor">Motor boşta</string>
+
+    <!-- Action bar -->
+    <string name="turbo_button">TURBO</string>
+    <string name="turbo_hold_hint">basılı tut</string>
+    <string name="turbo_empty">BOŞ</string>
+    <string name="upgrades_button">Yükseltmeler</string>
+    <string name="style_button">Görünüm</string>
+    <string name="stats_button">İstatistik</string>
+
+    <!-- Dialogs -->
+    <string name="welcome_back_title">Tekrar hoş geldin</string>
+    <string name="welcome_back_body">%1$s boyunca uzaktaydın. Jiro Hafıza motoru %2$s boyunca %%%3$d verimle döndürdü ve %4$s puan kazandırdı.</string>
+    <string name="ok">Süper</string>
+    <string name="zen_reset_title">Zen sıfırlama</string>
+    <string name="zen_reset_body">Tüm puanları, yükseltmeleri ve hızı bırak. Karşılığında %1$d Zen kazanırsın; her Zen tüm gelire kalıcı olarak +%%10 ekler. Görünümler, başarımlar ve rekorlar kalır.</string>
+    <string name="zen_reset_confirm">%1$d Zen için sıfırla</string>
+    <string name="keep_spinning">Dönmeye devam</string>
+    <string name="achievement_toast">Başarım: %1$s (+1 Zen)</string>
+
+    <!-- Upgrades sheet -->
+    <string name="upgrades_title">Yükseltmeler</string>
+    <string name="points_short">%1$s puan</string>
+    <string name="level_format">Sv %1$d / %2$d</string>
+    <string name="now_format">Şimdi: %1$s</string>
+    <string name="next_format">Sonraki: %1$s</string>
+    <string name="max_label">MAKS</string>
+    <string name="zen_card_title">☯ Zen sıfırlama</string>
+    <string name="zen_card_body">Bu turu bırak, her Zen için kalıcı +%%10 gelir kazan. Şimdiye kadar Zen: %1$d (x%2$s).</string>
+    <string name="zen_card_run">Bu tur: %1$s puan. Sonraki Zen %2$s puanda.</string>
+    <string name="zen_card_button">%1$d Zen için sıfırla</string>
+    <string name="zen_card_locked">Açmak için bu turda 1M puan kazan</string>
+
+    <!-- Stats sheet -->
+    <string name="stats_title">İstatistik</string>
+    <string name="stat_best_rpm">En yüksek RPM</string>
+    <string name="stat_revolutions">Toplam tur</string>
+    <string name="stat_lifetime_points">Toplam puan</string>
+    <string name="stat_run_points">Bu turdaki puan</string>
+    <string name="stat_zen">Zen</string>
+    <string name="stat_resets">Zen sıfırlama</string>
+    <string name="stat_play_time">Oyun süresi</string>
+    <string name="stat_achievements">Başarımlar</string>
+    <string name="challenges_title">Görevler</string>
+    <string name="challenge_reward">+1 Zen</string>
+
+    <!-- Style sheet -->
+    <string name="style_title">Görünüm</string>
+    <string name="equipped_label">Takılı</string>
+    <string name="equip_button">Tak</string>
+    <string name="language_title">Dil</string>
+    <string name="language_system">Cihaz dili</string>
+    <string name="language_en">English</string>
+    <string name="language_tr">Türkçe</string>
+</resources>

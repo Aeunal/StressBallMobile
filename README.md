@@ -10,28 +10,35 @@ The concept comes from a short video of the physical toy: "imagine it on the
 screen, you keep drawing circles on it, you try to spin it faster and raise
 the RPM, and it counts your score. Then challenges, leaderboards and so on."
 
+The game ships in English and Turkish (follows the device language, with an
+in-app override under Style).
+
 ## Gameplay
 
 | Mechanic | What it does |
 | --- | --- |
-| **Spin gesture** | Circle your finger around the ball. Your finger's angular speed (times the Gear Cap ratio) is the target the ball accelerates towards. |
-| **RPM** | The ball's speed. Friction slows it, upgrades fight friction. Above the cooling cap it overheats and cannot go faster. |
+| **Grip** | While your finger is on the ball it is gripped: circling spins it, holding still brakes it. Slow turns move the ball exactly as far as your finger did; fast circles engage the Gear Cap and multiply. A stock ball is stiff: it slips under a fast finger and bleeds speed quickly, so early upgrades are felt immediately. |
+| **RPM** | The ball's speed. Friction slows it, Slick Bearings and the Flywheel fight friction. Above the Liquid Cooling cap it overheats and cannot go faster. |
 | **Points** | Earned per revolution: `points/rev × multipliers`. |
-| **Overdrive** | A manual boost button: a burst of RPM plus doubled income for 8 seconds, on a cooldown. |
+| **Turbo** | Hold the button for instant momentum and a raised RPM cap, at doubled income. The charge drains while held and refills when released; keep holding it empty and the ball brakes instead. While boosting the ball is pressed into a disc. |
 | **Petal Shell** | Above 300 RPM the shell opens and multiplies income. |
 | **Resonance** | Staying above 120 RPM builds a combo multiplier that decays when you slow down. |
 | **Micro Motor** | An idle floor: the ball never drops below the motor's RPM, so it earns while you rest. |
 | **Gyro Memory** | Offline progress: the motor keeps earning for a capped number of hours at reduced efficiency. |
-| **Zen reset** | Prestige. Trade the run for Zen; each Zen permanently adds +10% income. Challenges (achievements) also grant Zen. |
+| **Style** | Ball and cap colours bought with points. |
+| **Effects** | The ball throws sparks from 350 RPM, wears a corona of flame from 900, crackles with lightning from 2,000 and wraps itself in plasma from 4,000. |
+| **Zen reset** | Prestige. Trade the run for Zen; each Zen permanently adds +10% income. Challenges (achievements) also grant Zen. Looks are kept. |
 
-All formulas live in `core/src/main/kotlin/com/aeunal/stressball/core/Stats.kt`
-and the upgrade catalogue in `Upgrades.kt`, so balancing is a one-file job.
+All formulas live in `core/src/main/kotlin/com/aeunal/stressball/core/Stats.kt`,
+the upgrade catalogue in `Upgrades.kt`, cosmetics in `Cosmetics.kt` and every
+player-facing string tied to game content in `GameText.kt` (both languages),
+so balancing and wording are one-file jobs.
 
 ## Project layout
 
 ```
-core/   Pure-Kotlin game engine (physics, economy, upgrades, save format). JVM unit tests.
-app/    Android app: Jetpack Compose UI, ViewModel game loop, DataStore persistence.
+core/   Pure-Kotlin game engine (physics, economy, upgrades, cosmetics, text, save format). JVM unit tests.
+app/    Android app: Jetpack Compose UI, ViewModel game loop, DataStore persistence, effects.
 ```
 
 `:core` has no Android dependency. `settings.gradle.kts` only includes `:app`
@@ -71,5 +78,5 @@ release-signed build later — the signatures do not match.
 
 - Online leaderboards for best RPM and fastest 1M points.
 - Daily challenges (e.g. reach 500 RPM without the motor).
-- Sound and haptics tied to RPM.
-- Cosmetic shells and caps.
+- Sound tied to RPM and the effect tiers.
+- More cosmetics: shell patterns, cap shapes, spark colours.

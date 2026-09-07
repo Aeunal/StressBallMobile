@@ -26,8 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aeunal.stressball.R
 import com.aeunal.stressball.core.GameView
 import com.aeunal.stressball.core.NumberFormat
 import com.aeunal.stressball.core.Stats
@@ -42,6 +44,7 @@ fun UpgradesSheet(
     onBuy: (String) -> Unit,
     onPrestige: () -> Unit,
 ) {
+    val text = LocalGameText.current
     val categories = UpgradeCategory.entries
     var tab by remember { mutableIntStateOf(0) }
 
@@ -51,9 +54,9 @@ fun UpgradesSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Upgrades", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.upgrades_title), style = MaterialTheme.typography.headlineMedium)
             Text(
-                "${NumberFormat.compact(view.points, 0)} pts",
+                stringResource(R.string.points_short, NumberFormat.compact(view.points, 0)),
                 style = MaterialTheme.typography.titleMedium,
                 color = BallColors.GreenLight,
             )
@@ -61,7 +64,7 @@ fun UpgradesSheet(
         Spacer(Modifier.height(8.dp))
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             categories.forEachIndexed { i, c ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(c.title) })
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(text.category(c)) })
             }
         }
         val defs = Upgrades.all.filter { it.category == categories[tab] }
@@ -82,6 +85,7 @@ fun UpgradesSheet(
 
 @Composable
 private fun UpgradeCard(def: UpgradeDef, view: GameView, onBuy: () -> Unit) {
+    val text = LocalGameText.current
     val level = view.state.level(def.id)
     val maxed = level >= def.maxLevel
     val cost = def.costAt(level)
@@ -93,16 +97,16 @@ private fun UpgradeCard(def: UpgradeDef, view: GameView, onBuy: () -> Unit) {
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(def.name, style = MaterialTheme.typography.titleMedium)
+                Text(text.upgradeName(def.id), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Lv $level / ${def.maxLevel}",
+                    stringResource(R.string.level_format, level, def.maxLevel),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                def.tagline,
+                text.upgradeTagline(def.id),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -113,10 +117,13 @@ private fun UpgradeCard(def: UpgradeDef, view: GameView, onBuy: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Now: ${def.describe(level)}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        stringResource(R.string.now_format, text.upgradeEffect(def.id, level)),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     if (!maxed) {
                         Text(
-                            "Next: ${def.describe(level + 1)}",
+                            stringResource(R.string.next_format, text.upgradeEffect(def.id, level + 1)),
                             style = MaterialTheme.typography.bodySmall,
                             color = BallColors.GreenLight,
                         )
@@ -125,7 +132,7 @@ private fun UpgradeCard(def: UpgradeDef, view: GameView, onBuy: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Button(onClick = onBuy, enabled = affordable) {
                     Text(
-                        if (maxed) "MAX" else NumberFormat.compact(cost, 0),
+                        if (maxed) stringResource(R.string.max_label) else NumberFormat.compact(cost, 0),
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -143,23 +150,28 @@ private fun ZenCard(view: GameView, onPrestige: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = BallColors.GreenDark),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("☯ Zen reset", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.zen_card_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Give up this run for permanent +10% income per Zen. " +
-                    "Zen so far: ${view.state.zen} (x${NumberFormat.compact(view.zenMultiplier, 2)}).",
+                stringResource(R.string.zen_card_body, view.state.zen, NumberFormat.compact(view.zenMultiplier, 2)),
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "This run: ${NumberFormat.compact(view.state.pointsThisRun)} pts. " +
-                    "Next Zen at ${NumberFormat.compact(next, 0)} pts.",
+                stringResource(
+                    R.string.zen_card_run,
+                    NumberFormat.compact(view.state.pointsThisRun),
+                    NumberFormat.compact(next, 0),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onPrestige, enabled = gain > 0, modifier = Modifier.fillMaxWidth()) {
-                Text(if (gain > 0) "Reset for $gain Zen" else "Earn 1M points this run to unlock")
+                Text(
+                    if (gain > 0) stringResource(R.string.zen_card_button, gain)
+                    else stringResource(R.string.zen_card_locked),
+                )
             }
         }
     }

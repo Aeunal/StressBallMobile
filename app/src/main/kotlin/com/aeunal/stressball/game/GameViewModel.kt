@@ -6,23 +6,27 @@ import androidx.lifecycle.viewModelScope
 import com.aeunal.stressball.core.GameEngine
 import com.aeunal.stressball.core.GameState
 import com.aeunal.stressball.core.GameView
+import com.aeunal.stressball.core.Language
 import com.aeunal.stressball.core.OfflineReport
 import com.aeunal.stressball.data.SaveRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
-/** One-shot messages the UI shows as toasts / snackbars. */
+/** One-shot messages the UI shows as toasts / dialogs. */
 sealed interface GameEvent {
     data class AchievementUnlocked(val id: String) : GameEvent
     data class Offline(val report: OfflineReport) : GameEvent
-    data object OverdriveFired : GameEvent
 }
 
 /**
@@ -37,6 +41,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SaveRepository(application)
     private val engine = GameEngine()
 
+    /** Saves must finish even if the ViewModel is cleared right after onStop. */
+    private val saveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val _view = MutableStateFlow(engine.view())
     val view: StateFlow<GameView> = _view.asStateFlow()
 
@@ -46,15 +53,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _events = MutableStateFlow<List<GameEvent>>(emptyList())
     val events: StateFlow<List<GameEvent>> = _events.asStateFlow()
 
-    /** +1 / -1: the direction the ball is visually spinning. */
-    private val _spinDirection = MutableStateFlow(1f)
-    val spinDirection: StateFlow<Float> = _spinDirection.asStateFlow()
+    /** In-app language override, null = device language. */
+    val language: StateFlow<Language?> = repository.language
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private var loopJob: Job? = null
-    private var fingerOmega = 0.0
-    private var lastFingerInputNanos = 0L
-    private var lastAutosaveNanos = 0L
     private var foreground = false
+
+    // Finger state. Touch events only arrive while the finger moves, so a
+    // finger that stops moving is detected by its samples going stale.
+    private var fingerDown = false
+    private var fingerOmega = 0.0
+    private var lastMoveNanos = 0L
+    private var turboHeld = false
+
+    private var lastAutosaveNanos = 0L
 
     init {
         viewModelScope.launch {
@@ -78,6 +91,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         foreground = false
         loopJob?.cancel()
         loopJob = null
+        onFingerUp()
+        setTurboHeld(false)
         saveNow()
     }
 
@@ -95,11 +110,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val dt = (now - last) / 1e9
                 last = now
 
-                if (now - lastFingerInputNanos < FINGER_HOLD_NANOS) {
-                    engine.spin(fingerOmega)
+                if (fingerDown) {
+                    val moving = now - lastMoveNanos < MOVE_HOLD_NANOS
+                    engine.setFinger(true, if (moving) fingerOmega else 0.0)
                 } else {
-                    fingerOmega = 0.0
+                    engine.setFinger(false)
                 }
+                engine.setTurbo(turboHeld)
 
                 val before = engine.state
                 engine.tick(dt)
@@ -117,35 +134,56 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Input
     // ------------------------------------------------------------------
 
+    fun onFingerDown() {
+        fingerDown = true
+        fingerOmega = 0.0
+        lastMoveNanos = 0L
+        engine.setFinger(true, 0.0)
+        _view.value = engine.view()
+    }
+
     /**
      * Called by the spin gesture with the finger's angular velocity around
-     * the ball centre in rad/s (signed). Values are smoothed to hide touch
-     * sampling jitter.
+     * the ball centre in rad/s (signed, clockwise positive). Samples are
+     * lightly smoothed to hide touch sampling jitter.
      */
-    fun onFingerSpin(omega: Double) {
-        if (!omega.isFinite()) return
-        val speed = abs(omega)
-        fingerOmega = if (fingerOmega == 0.0) speed else fingerOmega * 0.6 + speed * 0.4
-        lastFingerInputNanos = System.nanoTime()
-        if (speed > 0.5) _spinDirection.value = if (omega >= 0) 1f else -1f
+    fun onFingerMove(omega: Double) {
+        if (!omega.isFinite() || !fingerDown) return
+        fingerOmega = if (lastMoveNanos == 0L) omega else fingerOmega * 0.5 + omega * 0.5
+        lastMoveNanos = System.nanoTime()
     }
 
-    fun onFingerLift() {
+    fun onFingerUp() {
+        fingerDown = false
         fingerOmega = 0.0
-        lastFingerInputNanos = 0L
+        lastMoveNanos = 0L
+        engine.setFinger(false)
+        _view.value = engine.view()
     }
 
-    fun overdrive() {
-        val before = engine.state
-        if (engine.overdrive()) {
-            emit(GameEvent.OverdriveFired)
-            publish(before)
-        }
+    fun setTurboHeld(held: Boolean) {
+        turboHeld = held
+        engine.setTurbo(held)
+        _view.value = engine.view()
     }
 
     fun buy(id: String) {
         val before = engine.state
         if (engine.buy(id)) publish(before)
+    }
+
+    fun buyCosmetic(id: String) {
+        val before = engine.state
+        if (engine.buyCosmetic(id)) publish(before)
+    }
+
+    fun equipCosmetic(id: String) {
+        val before = engine.state
+        if (engine.equipCosmetic(id)) publish(before)
+    }
+
+    fun setLanguage(language: Language?) {
+        viewModelScope.launch { repository.setLanguage(language) }
     }
 
     fun prestige(): Boolean {
@@ -182,7 +220,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_loaded.value) return
         engine.markSaved(System.currentTimeMillis())
         val snapshot = engine.state
-        viewModelScope.launch { repository.save(snapshot) }
+        saveScope.launch { repository.save(snapshot) }
     }
 
     override fun onCleared() {
@@ -192,7 +230,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val FRAME_MS = 16L
-        const val FINGER_HOLD_NANOS = 120_000_000L
+        /** A finger with no movement sample for this long counts as held still. */
+        const val MOVE_HOLD_NANOS = 80_000_000L
         const val AUTOSAVE_NANOS = 5_000_000_000L
     }
 }

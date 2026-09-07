@@ -15,7 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.aeunal.stressball.R
 import com.aeunal.stressball.core.Achievements
 import com.aeunal.stressball.core.GameView
 import com.aeunal.stressball.core.NumberFormat
@@ -23,16 +25,17 @@ import com.aeunal.stressball.ui.theme.BallColors
 
 @Composable
 fun StatsSheet(view: GameView) {
+    val text = LocalGameText.current
     val s = view.state
     val rows = listOf(
-        "Best RPM" to NumberFormat.integer(s.bestRpm),
-        "Total revolutions" to NumberFormat.compact(s.totalRevolutions),
-        "Lifetime points" to NumberFormat.compact(s.totalPointsEarned),
-        "Points this run" to NumberFormat.compact(s.pointsThisRun),
-        "Zen" to "${s.zen} (x${NumberFormat.compact(view.zenMultiplier, 2)})",
-        "Zen resets" to s.prestigeCount.toString(),
-        "Play time" to NumberFormat.duration(s.playTimeSeconds),
-        "Achievements" to "${s.achievements.size} / ${Achievements.all.size}",
+        stringResource(R.string.stat_best_rpm) to NumberFormat.integer(s.bestRpm),
+        stringResource(R.string.stat_revolutions) to NumberFormat.compact(s.totalRevolutions),
+        stringResource(R.string.stat_lifetime_points) to NumberFormat.compact(s.totalPointsEarned),
+        stringResource(R.string.stat_run_points) to NumberFormat.compact(s.pointsThisRun),
+        stringResource(R.string.stat_zen) to "${s.zen} (x${NumberFormat.compact(view.zenMultiplier, 2)})",
+        stringResource(R.string.stat_resets) to s.prestigeCount.toString(),
+        stringResource(R.string.stat_play_time) to NumberFormat.duration(s.playTimeSeconds),
+        stringResource(R.string.stat_achievements) to "${s.achievements.size} / ${Achievements.all.size}",
     )
 
     LazyColumn(
@@ -40,7 +43,7 @@ fun StatsSheet(view: GameView) {
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
     ) {
         item {
-            Text("Stats", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.stats_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(12.dp))
         }
         items(rows) { (label, value) ->
@@ -51,7 +54,7 @@ fun StatsSheet(view: GameView) {
         }
         item {
             Spacer(Modifier.height(16.dp))
-            Text("Challenges", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.challenges_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             HorizontalDivider()
         }
@@ -62,15 +65,15 @@ fun StatsSheet(view: GameView) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(def.title, style = MaterialTheme.typography.bodyLarge)
+                    Text(text.achievementTitle(def.id), style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        def.description,
+                        text.achievementDescription(def.id),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
-                    if (unlocked) "✓" else "+1 Zen",
+                    if (unlocked) "✓" else stringResource(R.string.challenge_reward),
                     color = if (unlocked) BallColors.GreenLight else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

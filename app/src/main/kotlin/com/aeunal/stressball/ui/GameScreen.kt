@@ -1,11 +1,14 @@
 package com.aeunal.stressball.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,9 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -39,49 +42,57 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.aeunal.stressball.core.Achievements
+import com.aeunal.stressball.R
 import com.aeunal.stressball.core.GameView
+import com.aeunal.stressball.core.Language
 import com.aeunal.stressball.core.NumberFormat
 import com.aeunal.stressball.game.GameEvent
 import com.aeunal.stressball.game.GameViewModel
 import com.aeunal.stressball.ui.theme.BallColors
 
-private enum class Sheet { NONE, UPGRADES, STATS }
+private enum class Sheet { NONE, UPGRADES, STYLE, STATS }
+
+@Composable
+fun GameScreen(viewModel: GameViewModel) {
+    val language by viewModel.language.collectAsStateWithLifecycle()
+    ProvideAppLanguage(language) {
+        GameContent(viewModel = viewModel, language = language)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameScreen(viewModel: GameViewModel) {
+private fun GameContent(viewModel: GameViewModel, language: Language?) {
     val view by viewModel.view.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
-    val direction by viewModel.spinDirection.collectAsStateWithLifecycle()
     val events by viewModel.events.collectAsStateWithLifecycle()
 
     val snackbar = remember { SnackbarHostState() }
     var sheet by remember { mutableStateOf(Sheet.NONE) }
     var offlineDialog by remember { mutableStateOf<GameEvent.Offline?>(null) }
     var prestigeDialog by remember { mutableStateOf(false) }
-    val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val text = LocalGameText.current
 
     // Drain one-shot events into the right surface.
-    LaunchedEffect(events) {
+    LaunchedEffect(events, context, text) {
         val event = events.firstOrNull() ?: return@LaunchedEffect
         when (event) {
             is GameEvent.Offline -> offlineDialog = event
             is GameEvent.AchievementUnlocked -> {
-                val def = Achievements.byId[event.id]
                 viewModel.consumeEvent(event)
-                if (def != null) snackbar.showSnackbar("Achievement: ${def.title} (+1 Zen)")
-            }
-            GameEvent.OverdriveFired -> {
-                viewModel.consumeEvent(event)
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                snackbar.showSnackbar(context.getString(R.string.achievement_toast, text.achievementTitle(event.id)))
             }
         }
     }
@@ -110,13 +121,13 @@ fun GameScreen(viewModel: GameViewModel) {
 
             BallCanvas(
                 view = view,
-                direction = direction,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .spinGesture(
-                        onSpin = viewModel::onFingerSpin,
-                        onLift = viewModel::onFingerLift,
+                        onDown = viewModel::onFingerDown,
+                        onMove = viewModel::onFingerMove,
+                        onUp = viewModel::onFingerUp,
                     ),
             )
 
@@ -124,8 +135,9 @@ fun GameScreen(viewModel: GameViewModel) {
             Spacer(Modifier.height(12.dp))
             ActionBar(
                 view = view,
-                onOverdrive = viewModel::overdrive,
+                onTurbo = viewModel::setTurboHeld,
                 onUpgrades = { sheet = Sheet.UPGRADES },
+                onStyle = { sheet = Sheet.STYLE },
                 onStats = { sheet = Sheet.STATS },
             )
             Spacer(Modifier.height(16.dp))
@@ -145,6 +157,13 @@ fun GameScreen(viewModel: GameViewModel) {
                     onBuy = viewModel::buy,
                     onPrestige = { prestigeDialog = true },
                 )
+                Sheet.STYLE -> StyleSheet(
+                    view = view,
+                    language = language,
+                    onBuy = viewModel::buyCosmetic,
+                    onEquip = viewModel::equipCosmetic,
+                    onLanguage = viewModel::setLanguage,
+                )
                 Sheet.STATS -> StatsSheet(view)
                 Sheet.NONE -> Unit
             }
@@ -156,15 +175,20 @@ fun GameScreen(viewModel: GameViewModel) {
         AlertDialog(
             onDismissRequest = { viewModel.consumeEvent(event); offlineDialog = null },
             confirmButton = {
-                TextButton(onClick = { viewModel.consumeEvent(event); offlineDialog = null }) { Text("Nice") }
+                TextButton(onClick = { viewModel.consumeEvent(event); offlineDialog = null }) {
+                    Text(stringResource(R.string.ok))
+                }
             },
-            title = { Text("Welcome back") },
+            title = { Text(stringResource(R.string.welcome_back_title)) },
             text = {
                 Text(
-                    "You were away for ${NumberFormat.duration(r.secondsAway)}. " +
-                        "Gyro Memory kept the motor turning for ${NumberFormat.duration(r.secondsCredited)} " +
-                        "at ${(r.efficiency * 100).toInt()}% efficiency and earned " +
-                        "${NumberFormat.compact(r.pointsEarned)} points.",
+                    stringResource(
+                        R.string.welcome_back_body,
+                        NumberFormat.duration(r.secondsAway),
+                        NumberFormat.duration(r.secondsCredited),
+                        (r.efficiency * 100).toInt(),
+                        NumberFormat.compact(r.pointsEarned),
+                    ),
                 )
             },
         )
@@ -178,16 +202,13 @@ fun GameScreen(viewModel: GameViewModel) {
                     prestigeDialog = false
                     sheet = Sheet.NONE
                     viewModel.prestige()
-                }) { Text("Reset for ${view.zenOnReset} Zen") }
+                }) { Text(stringResource(R.string.zen_reset_confirm, view.zenOnReset)) }
             },
-            dismissButton = { TextButton(onClick = { prestigeDialog = false }) { Text("Keep spinning") } },
-            title = { Text("Zen reset") },
-            text = {
-                Text(
-                    "Let go of all points, upgrades and speed. In return you gain ${view.zenOnReset} Zen, " +
-                        "each permanently adding +10% to all income. Achievements and records stay.",
-                )
+            dismissButton = {
+                TextButton(onClick = { prestigeDialog = false }) { Text(stringResource(R.string.keep_spinning)) }
             },
+            title = { Text(stringResource(R.string.zen_reset_title)) },
+            text = { Text(stringResource(R.string.zen_reset_body, view.zenOnReset)) },
         )
     }
 }
@@ -206,7 +227,11 @@ private fun Header(view: GameView) {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "${NumberFormat.compact(view.pointsPerSecond)} / s  •  x${NumberFormat.compact(view.totalMultiplier, 2)}",
+                text = stringResource(
+                    R.string.rate_format,
+                    NumberFormat.compact(view.pointsPerSecond),
+                    NumberFormat.compact(view.totalMultiplier, 2),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -218,7 +243,7 @@ private fun Header(view: GameView) {
                 color = BallColors.GreenLight,
             )
             Text(
-                text = "Zen",
+                text = stringResource(R.string.zen_label),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -228,28 +253,29 @@ private fun Header(view: GameView) {
 
 @Composable
 private fun RpmMeter(view: GameView) {
-    val heat = view.heat.toFloat()
+    val fill = (view.rpm / view.rpmCap).coerceIn(0.0, 1.0).toFloat()
     val barColor = when {
-        view.overdriveActive -> BallColors.Overdrive
-        heat > 0.85f -> BallColors.Heat
+        view.turboOverheating -> BallColors.Heat
+        view.turboBoosting -> BallColors.Overdrive
+        fill > 0.85f -> BallColors.Heat
         else -> BallColors.GreenLight
     }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = "${NumberFormat.integer(view.rpm)} RPM",
+                text = stringResource(R.string.rpm_format, NumberFormat.integer(view.rpm)),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "max ${NumberFormat.integer(view.rpmCap)}",
+                    text = stringResource(R.string.cap_format, NumberFormat.integer(view.rpmCap)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (view.state.bestRpm > 0) {
                     Text(
-                        text = "best ${NumberFormat.integer(view.state.bestRpm)}",
+                        text = stringResource(R.string.best_format, NumberFormat.integer(view.state.bestRpm)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -258,16 +284,23 @@ private fun RpmMeter(view: GameView) {
         }
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
-            progress = { heat },
+            progress = { fill },
             modifier = Modifier.fillMaxWidth().height(6.dp),
             color = barColor,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (view.petalsOpen) StatusPill("Petals open x${NumberFormat.compact(view.petalMultiplier, 1)}", BallColors.GreenLight)
-            if (view.comboMultiplier > 1.001) StatusPill("Resonance x${NumberFormat.compact(view.comboMultiplier, 2)}", BallColors.Heat)
-            if (view.overdriveActive) StatusPill("OVERDRIVE x2", BallColors.Overdrive)
-            if (view.motorRpm > 0 && view.rpm <= view.motorRpm + 0.5) StatusPill("Motor idling", MaterialTheme.colorScheme.onSurfaceVariant)
+            if (view.petalsOpen) {
+                StatusPill(stringResource(R.string.badge_petals, NumberFormat.compact(view.petalMultiplier, 1)), BallColors.GreenLight)
+            }
+            if (view.comboMultiplier > 1.001) {
+                StatusPill(stringResource(R.string.badge_resonance, NumberFormat.compact(view.comboMultiplier, 2)), BallColors.Heat)
+            }
+            if (view.turboBoosting) StatusPill(stringResource(R.string.badge_turbo), BallColors.Overdrive)
+            if (view.turboOverheating) StatusPill(stringResource(R.string.badge_overheat), BallColors.Heat)
+            if (view.motorRpm > 0 && view.rpm <= view.motorRpm + 0.5 && !view.fingerTouching) {
+                StatusPill(stringResource(R.string.badge_motor), MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -287,13 +320,15 @@ private fun StatusPill(text: String, color: Color) {
 
 @Composable
 private fun Hint(view: GameView) {
-    val text = when {
-        view.state.totalRevolutions < 30 -> "Draw circles on the ball to spin it"
-        view.rpm < 5 && view.motorRpm == 0.0 -> "Keep circling. Faster circles, more RPM"
+    val revolutions = view.state.totalRevolutions
+    val message = when {
+        revolutions < 30 -> stringResource(R.string.hint_draw_circles)
+        view.fingerTouching && view.rpm < 5 -> stringResource(R.string.hint_keep_circling)
+        !view.fingerTouching && view.rpm > 200 && revolutions < 400 -> stringResource(R.string.hint_hold_to_brake)
         else -> ""
     }
     Text(
-        text = text,
+        text = message,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -304,40 +339,85 @@ private fun Hint(view: GameView) {
 @Composable
 private fun ActionBar(
     view: GameView,
-    onOverdrive: () -> Unit,
+    onTurbo: (Boolean) -> Unit,
     onUpgrades: () -> Unit,
+    onStyle: () -> Unit,
     onStats: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Button(
-            onClick = onOverdrive,
-            enabled = view.overdriveReady,
-            modifier = Modifier.weight(1f).height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = BallColors.Red,
-                contentColor = Color.White,
-            ),
-        ) {
-            Text(
-                text = when {
-                    !view.overdriveUnlocked -> "Overdrive (locked)"
-                    view.overdriveReady -> "OVERDRIVE"
-                    else -> "Overdrive in ${NumberFormat.duration(view.overdriveCooldown)}"
-                },
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        TurboButton(view = view, onHold = onTurbo, modifier = Modifier.weight(1f))
         FilledTonalButton(onClick = onUpgrades, modifier = Modifier.height(56.dp)) {
             Icon(Icons.Filled.Build, contentDescription = null)
             Spacer(Modifier.width(6.dp))
-            Text("Upgrades")
+            Text(stringResource(R.string.upgrades_button))
+        }
+        FilledTonalButton(onClick = onStyle, modifier = Modifier.height(56.dp)) {
+            Icon(Icons.Filled.Star, contentDescription = stringResource(R.string.style_button))
         }
         FilledTonalButton(onClick = onStats, modifier = Modifier.height(56.dp)) {
-            Icon(Icons.Filled.Info, contentDescription = "Stats")
+            Icon(Icons.Filled.Info, contentDescription = stringResource(R.string.stats_button))
         }
     }
+}
+
+/**
+ * Hold-to-boost. The fill shows the remaining charge: it drains while held,
+ * refills when released, and turns hot when held empty.
+ */
+@Composable
+private fun TurboButton(view: GameView, onHold: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val haptics = LocalHapticFeedback.current
+    val charge = view.turboCharge.toFloat().coerceIn(0f, 1f)
+    val fill = when {
+        view.turboOverheating -> BallColors.Heat
+        view.turboBoosting -> BallColors.Overdrive
+        else -> BallColors.Red
+    }
+    val label = if (view.turboOverheating) stringResource(R.string.turbo_empty) else stringResource(R.string.turbo_button)
+
+    Box(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onHold(true)
+                        try {
+                            tryAwaitRelease()
+                        } finally {
+                            onHold(false)
+                        }
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        ChargeFill(fraction = charge, color = fill)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                stringResource(R.string.turbo_hold_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.ChargeFill(fraction: Float, color: Color) {
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .fillMaxWidth(fraction)
+            .align(Alignment.CenterStart)
+            .background(color.copy(alpha = 0.85f)),
+    )
 }
