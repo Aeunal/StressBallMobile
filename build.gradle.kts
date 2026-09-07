@@ -1,12 +1,7 @@
-// Top-level build file. JetBrains plugins are declared here (apply false) so
-// that sub-projects share one version from gradle/libs.versions.toml.
+// Top-level build file.
 //
-// The Android Gradle Plugin is deliberately NOT declared here: it is only
-// applied by :app, so that a machine without access to Google's Maven
-// repository (or without an Android SDK) can still build and test :core.
-plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.android) apply false
-    alias(libs.plugins.kotlin.serialization) apply false
-    alias(libs.plugins.compose.compiler) apply false
-}
+// Deliberately empty: every module declares its own plugins (with versions
+// taken from gradle/libs.versions.toml) so that each plugin set is loaded in
+// that module's classloader. The Kotlin Android plugin must be loaded together
+// with the Android Gradle Plugin, and keeping AGP out of the root build lets
+// :core build on machines without access to Google's Maven repository.

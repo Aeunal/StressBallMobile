@@ -22,6 +22,8 @@ upgrades. See README.md for the game design.
 
 ## Rules of thumb
 
+- The root `build.gradle.kts` declares no plugins on purpose: `:app` must load the Android Gradle Plugin and the Kotlin Android plugin in the same classloader, so each module declares its own plugins from the version catalog.
+
 - Put gameplay logic in `:core` and cover it with a unit test; keep `:app` to rendering, input and persistence.
 - Never rename upgrade or achievement ids: they are persisted.
 - `:app` is only included by `settings.gradle.kts` when an Android SDK is configured. Without one, `./gradlew :core:test` still works; the APK is built by CI.
