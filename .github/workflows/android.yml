@@ -5,6 +5,9 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,11 +32,16 @@ jobs:
         continue-on-error: true
         run: ./gradlew :app:lintDebug --no-daemon
 
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/stressball-debug.apk
+
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: stressball-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: dist/stressball-debug.apk
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
@@ -44,3 +52,32 @@ jobs:
             core/build/reports/tests/
             app/build/reports/
           if-no-files-found: ignore
+
+      # Publish the APK as a rolling pre-release so it can be downloaded
+      # straight onto a phone: no GitHub login, no zip to unpack. The tag is
+      # derived from the branch name, so the download URL is stable and always
+      # serves that branch's newest build.
+      - name: Publish rolling pre-release
+        if: success() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          slug=$(echo "${GITHUB_REF_NAME}" | tr '/' '-' | tr -cd '[:alnum:]-_.')
+          tag="dev-${slug}"
+          notes="Automated debug build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}.
+
+          Debug-signed and installable directly: download stressball-debug.apk below,
+          then allow installs from your browser when Android asks.
+          Every new push to this branch replaces this release."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --target "$GITHUB_SHA" --notes "$notes" --prerelease
+            gh release upload "$tag" dist/stressball-debug.apk --clobber
+          else
+            gh release create "$tag" dist/stressball-debug.apk \
+              --title "Dev build: ${GITHUB_REF_NAME}" \
+              --notes "$notes" \
+              --target "$GITHUB_SHA" \
+              --prerelease
+          fi
+          echo "APK: https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/stressball-debug.apk" >> "$GITHUB_STEP_SUMMARY"
