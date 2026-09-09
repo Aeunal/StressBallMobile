@@ -3,14 +3,20 @@
     <string name="app_name">Stres Topu</string>
 
     <!-- Hints under the ball -->
-    <string name="hint_draw_circles">Topun üstünde daire çiz ya da üzerinden kaydır</string>
-    <string name="hint_keep_circling">Devam et. Hızlı hareket, daha çok RPM</string>
+    <string name="hint_swipe">Yuvarlamak için topun üzerinden kaydır</string>
+    <string name="hint_circle">Döndürmek için kapağın etrafında daire çiz</string>
+    <string name="hint_keep_going">Devam et. Hızlı hareket, daha çok RPM</string>
     <string name="hint_hold_to_brake">Frenlemek için topu tut</string>
     <string name="hint_pinch_turbo">Turbo için topu üstten ve alttan sık</string>
+    <string name="hint_spark">Altın kıvılcım! Dokun</string>
 
     <!-- Header / meter -->
     <string name="rate_format">%1$s / sn  •  x%2$s</string>
+    <string name="garage_rate_format">garajdan +%1$s / sn</string>
     <string name="zen_label">Zen</string>
+    <string name="gems_format">◆ %1$d</string>
+    <string name="gems_top_up">+10</string>
+    <string name="gems_hint">Mücevherler yükseltmeleri sonuna kadar alınca gelir. +10 şimdilik bedava.</string>
     <string name="rpm_format">%1$s RPM</string>
     <string name="cap_format">en fazla %1$s</string>
     <string name="best_format">rekor %1$s</string>
@@ -19,6 +25,7 @@
     <string name="badge_turbo">TURBO</string>
     <string name="badge_overheat">AŞIRI ISINMA</string>
     <string name="badge_motor">Motor boşta</string>
+    <string name="badge_buff">%1$s %2$s</string>
 
     <!-- Turbo bar -->
     <string name="turbo_label">Turbo</string>
@@ -30,31 +37,66 @@
 
     <!-- Action bar -->
     <string name="upgrades_button">Yükseltmeler</string>
-    <string name="style_button">Görünüm</string>
+    <string name="garage_button">Garaj</string>
+    <string name="skins_button">Kaplamalar</string>
     <string name="stats_button">İstatistik</string>
+    <string name="view_top">Üstten bak</string>
+    <string name="view_side">Yandan bak</string>
 
     <!-- Dialogs -->
     <string name="welcome_back_title">Tekrar hoş geldin</string>
-    <string name="welcome_back_body">%1$s boyunca uzaktaydın. Jiro Hafıza motoru %2$s boyunca %%%3$d verimle döndürdü ve %4$s puan kazandırdı.</string>
+    <string name="welcome_back_body">%1$s boyunca uzaktaydın. Topların %2$s boyunca %%%3$d verimle döndü ve %4$s puan kazandırdı.</string>
     <string name="ok">Süper</string>
+    <string name="cancel">Vazgeç</string>
     <string name="zen_reset_title">Zen sıfırlama</string>
-    <string name="zen_reset_body">Tüm puanları, yükseltmeleri ve hızı bırak. Karşılığında %1$d Zen kazanırsın; her Zen tüm gelire kalıcı olarak +%%10 ekler. Görünümler, başarımlar ve rekorlar kalır.</string>
+    <string name="zen_reset_body">Bu topun yükseltmelerini, hızını ve puan bakiyeni bırak. Karşılığında %1$d Zen kazanırsın; her Zen tüm gelire kalıcı olarak +%%10 ekler. Diğer toplar, kaplamalar, başarımlar ve rekorlar kalır.</string>
     <string name="zen_reset_confirm">%1$d Zen için sıfırla</string>
     <string name="keep_spinning">Dönmeye devam</string>
     <string name="achievement_toast">Başarım: %1$s (+1 Zen)</string>
+    <string name="spark_toast">%1$s! %2$s</string>
+    <string name="chest_result_title">Yeni top!</string>
+    <string name="chest_result_switch">Hemen oyna</string>
+    <string name="chest_result_keep">Şimdikiyle devam</string>
+    <string name="sell_title">%1$s satılsın mı?</string>
+    <string name="sell_body">%1$s puan geri alırsın. Yükseltmeleri tamamen gider.</string>
+    <string name="sell_confirm">Sat</string>
 
     <!-- Upgrades sheet -->
     <string name="upgrades_title">Yükseltmeler</string>
+    <string name="upgrades_hint">Bir yükseltmeyi sonuna kadar almak ◆ %1$d mücevher kazandırır.</string>
     <string name="points_short">%1$s puan</string>
     <string name="level_format">Sv %1$d / %2$d</string>
+    <string name="scope_account">tüm toplar</string>
     <string name="now_format">Şimdi: %1$s</string>
     <string name="next_format">Sonraki: %1$s</string>
     <string name="max_label">MAKS</string>
     <string name="zen_card_title">☯ Zen sıfırlama</string>
-    <string name="zen_card_body">Bu turu bırak, her Zen için kalıcı +%%10 gelir kazan. Şimdiye kadar Zen: %1$d (x%2$s).</string>
+    <string name="zen_card_body">Bu topun turunu bırak, her Zen için kalıcı +%%10 gelir kazan. Şimdiye kadar Zen: %1$d (x%2$s).</string>
     <string name="zen_card_run">Bu tur: %1$s puan. Sonraki Zen %2$s puanda.</string>
     <string name="zen_card_button">%1$d Zen için sıfırla</string>
-    <string name="zen_card_locked">Açmak için bu turda 1M puan kazan</string>
+    <string name="zen_card_locked">Açmak için bu topla 1M puan kazan</string>
+
+    <!-- Garage sheet -->
+    <string name="garage_title">Garaj</string>
+    <string name="garage_income">Sen başka topla oynarken garajdakiler +%1$s / sn kazandırıyor</string>
+    <string name="chest_title">Top sandığı</string>
+    <string name="chest_body">%1$d / %2$d top. Her sandıktan rastgele bir top çıkar; fiyat her seferinde üçe katlanır.</string>
+    <string name="chest_odds">Efsanevi ve üstü: %%%1$s</string>
+    <string name="chest_open">Sandığı aç  •  %1$s puan</string>
+    <string name="chest_full">Garaj dolu</string>
+    <string name="ball_stats">%1$s RPM  •  %2$s / sn  •  Sv %3$d</string>
+    <string name="ball_active">OYNANIYOR</string>
+    <string name="ball_switch">Oyna</string>
+    <string name="ball_sell">Sat %1$s</string>
+
+    <!-- Skins sheet -->
+    <string name="skins_title">Kaplamalar</string>
+    <string name="skin_equip">Tak</string>
+    <string name="skin_equipped">Takılı</string>
+    <string name="skin_unequip">Çıkar</string>
+    <string name="language_title">Dil</string>
+    <string name="language_en">English</string>
+    <string name="language_tr">Türkçe</string>
 
     <!-- Stats sheet -->
     <string name="stats_title">İstatistik</string>
@@ -62,18 +104,15 @@
     <string name="stat_revolutions">Toplam tur</string>
     <string name="stat_lifetime_points">Toplam puan</string>
     <string name="stat_run_points">Bu turdaki puan</string>
+    <string name="stat_balls">Toplar</string>
+    <string name="stat_chests">sandık</string>
+    <string name="stat_sold">satıldı</string>
+    <string name="stat_gems">Mücevher</string>
     <string name="stat_zen">Zen</string>
     <string name="stat_resets">Zen sıfırlama</string>
+    <string name="stat_sparks">Yakalanan kıvılcım</string>
     <string name="stat_play_time">Oyun süresi</string>
     <string name="stat_achievements">Başarımlar</string>
     <string name="challenges_title">Görevler</string>
     <string name="challenge_reward">+1 Zen</string>
-
-    <!-- Style sheet -->
-    <string name="style_title">Görünüm</string>
-    <string name="equipped_label">Takılı</string>
-    <string name="equip_button">Tak</string>
-    <string name="language_title">Dil</string>
-    <string name="language_en">English</string>
-    <string name="language_tr">Türkçe</string>
 </resources>

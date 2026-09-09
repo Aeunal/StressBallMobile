@@ -1,42 +1,40 @@
 # Stress Ball
 
-An Android idle game about a fidget toy: a red rubber stress ball with a
-green gear cap. Draw circles on the ball with your finger to spin it. The
-faster and longer you spin, the higher the RPM and the more points you earn.
-Points buy upgrades that make the ball spin faster, coast longer, keep turning
-on its own, and count every revolution for more.
+An Android idle game about a fidget toy: a rubber stress ball with a gear
+cap. Swipe across the ball to roll it, or flip it and circle the cap to spin
+it. RPM earns points; points buy upgrades, chests full of rarer balls, and a
+garage where every ball you own keeps earning.
 
 The concept comes from a short video of the physical toy: "imagine it on the
 screen, you keep drawing circles on it, you try to spin it faster and raise
 the RPM, and it counts your score. Then challenges, leaderboards and so on."
 
-The game ships in Turkish (default) and English, switchable under Style.
+The game ships in Turkish (default) and English, switchable under Skins.
 
 ## Gameplay
 
 | Mechanic | What it does |
 | --- | --- |
-| **Grip** | While one finger is on the ball it is gripped, like a slipping clutch: the ball chases the speed your finger implies, up to how hard the rubber can push (Grip Tape). Holding still brakes it. **Circling** twists it like the cap: slow turns move it one-to-one, fast circles engage the Gear Cap. **Swiping across the face** rolls it like a real ball: the surface follows your finger, so a swipe in the spin direction adds speed and one against it slows or reverses it. A swipe slower than the surface brakes unless the Rubber Tread over-rolls it. The two readings are blended by how circular the stroke is, so a straight swipe is never mistaken for a circle. A stock ball is stiff and bleeds speed quickly, so early upgrades are felt immediately. |
-| **RPM** | The ball's speed. Bearing friction (Coulomb + viscous) slows it; Slick Bearings cut the coefficients and the Flywheel adds inertia. Above the Liquid Cooling cap it overheats and cannot go faster. |
-| **Points** | Earned per revolution: `points/rev × multipliers`. |
-| **Turbo** | Pinch the ball from top and bottom. The squeeze is a weight from 0 to 1: thrust, fuel burn, the raised RPM cap and the income bonus all scale with it, and a fast pinch adds a kick. The ball flattens into a disc exactly as far as you squeeze. Stock fuel lasts about a second; after use there is a cooldown before it refills. Squeezing an empty tank brakes. A second finger merely resting on the screen does nothing, and a lingering finger after a pinch never brakes the ball. |
-| **Petal Shell** | Above 300 RPM the shell opens and multiplies income. |
-| **Resonance** | Staying above 120 RPM builds a combo multiplier that decays when you slow down. |
-| **Micro Motor** | An idle floor: the ball never drops below the motor's RPM, so it earns while you rest. |
-| **Gyro Memory** | Offline progress: the motor keeps earning for a capped number of hours at reduced efficiency. |
-| **Style** | Ball and cap colours bought with points. |
-| **Effects** | The ball throws sparks from 350 RPM, wears a corona of flame from 900, crackles with lightning from 2,000 and wraps itself in plasma from 4,000. |
-| **Zen reset** | Prestige. Trade the run for Zen; each Zen permanently adds +10% income. Challenges (achievements) also grant Zen. Looks are kept. |
+| **Grip** | While one finger is on the ball it is gripped, like a slipping clutch: the ball chases the speed your finger implies, up to how hard the rubber can push (Grip Tape). Holding still brakes it; with the Kinetic Harvester, braking pays the lost spin back as points. **From the side** (default) you swipe across the face: the surface follows your finger, so a swipe with the spin adds speed and one against it slows or reverses it. A swipe slower than the surface brakes unless the Rubber Tread over-rolls it. **From above** (Gimbal Mount) you circle the cap: slow turns move it one-to-one, fast circles engage the Gear Cap, and it is far easier to keep going. |
+| **RPM** | The ball's speed. Bearing friction (Coulomb + viscous, over inertia) and air drag (∝ speed²) slow it; Slick Bearings, the Flywheel and the Aero Shell fight them. Above the Liquid Cooling / Cryo Core cap it overheats and cannot go faster. |
+| **Points** | Earned per revolution: `points/rev × multipliers` (petals, resonance combo, Zen, turbo, Frenzy, ball traits, skins). |
+| **Turbo** | Pinch the ball from top and bottom. The squeeze is a weight from 0 to 1: thrust, fuel burn, the raised RPM cap and the income bonus all scale with it, and a fast pinch adds a kick (Nitro). The ball flattens into a disc as far as you squeeze. Stock fuel lasts about a second; after use there is a cooldown before it refills. Squeezing an empty tank brakes (less with a Heat Sink). |
+| **Garage** | You own up to 8 balls and play one at a time. The others idle at their motor floor and earn a Bearing Rack share of that income, online and offline. Switch any time. |
+| **Chests** | A chest holds a random named ball: Common → Rare → Very Rare → Legendary → Mythic → Exotic, each with its own colours, aura and traits (income, drag, grip, turbo fuel, cap). The price triples per ball owned; Lucky Chest improves the odds. Balls can be sold for their rarity value plus half of what was invested in them. |
+| **Gems and skins** | Maxing any upgrade awards gems (the + button also tops up, free for now). Gems buy skins: one **outer** (patterns on the shell: stripes, spots, hex armour, Saturn rings, starfield, magma cracks) and one **interior** (a glow from inside: ember, crystal, void, storm, prism, clockwork) can be active at a time, each with a permanent buff. |
+| **Golden sparks** | Every few minutes a spark appears for 12 seconds. Tap it for Frenzy (×7 income), a Jackpot (15 minutes of income), a Recharge (full turbo, free fuel) or Wild Grip (×3 grip). Lucky Charm makes them more frequent. |
+| **Effects** | Sparks from 350 RPM, flames from 900, lightning from 2,000, plasma from 4,000, a light-bending singularity from 8,000, supernova shockwaves from 16,000 and a quantum glitch from 32,000. |
+| **Zen reset** | Prestige the active ball: its upgrades, speed and the point balance go, and each Zen gained permanently adds +10% income. Other balls, skins, achievements and records stay. Challenges (achievements) also grant Zen. |
 
-All formulas live in `core/src/main/kotlin/com/aeunal/stressball/core/Stats.kt`,
-the upgrade catalogue in `Upgrades.kt`, cosmetics in `Cosmetics.kt` and every
-player-facing string tied to game content in `GameText.kt` (both languages),
-so balancing and wording are one-file jobs.
+All formulas live in `core/src/main/kotlin/com/aeunal/stressball/core/Stats.kt`;
+the catalogues are `Upgrades.kt` (23 upgrades, ball- and account-scoped),
+`BallTypes.kt`, `Skins.kt` and `Achievements.kt`; every player-facing string
+tied to game content is in `GameText.kt` (both languages).
 
 ## Project layout
 
 ```
-core/   Pure-Kotlin game engine (physics, economy, upgrades, cosmetics, text, save format). JVM unit tests.
+core/   Pure-Kotlin game engine (physics, economy, garage, chests, skins, sparks, text, save format + migration). JVM unit tests.
 app/    Android app: Jetpack Compose UI, ViewModel game loop, DataStore persistence, effects.
 ```
 
@@ -75,7 +73,8 @@ release-signed build later — the signatures do not match.
 
 ## Roadmap ideas
 
-- Online leaderboards for best RPM and fastest 1M points.
-- Daily challenges (e.g. reach 500 RPM without the motor).
+- Online leaderboards (best RPM, fastest 1M) and clans: need a backend and a
+  server-authoritative save; the local JSON save is not tamper-proof.
+- Expeditions: send a garage ball away for an hour to bring back gems or a chest.
+- Daily challenges with their own rewards.
 - Sound tied to RPM and the effect tiers.
-- More cosmetics: shell patterns, cap shapes, spark colours.

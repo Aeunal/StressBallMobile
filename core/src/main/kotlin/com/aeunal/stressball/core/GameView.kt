@@ -1,8 +1,25 @@
 package com.aeunal.stressball.core
 
+/** One row of the garage list. */
+data class BallSummary(
+    val id: String,
+    val typeId: String,
+    val rarity: Rarity,
+    val rpm: Double,
+    /** What it earns per second right now (idle income for garage balls). */
+    val pointsPerSecond: Double,
+    /** Sum of upgrade levels, as a rough "how built" number. */
+    val upgradeLevels: Int,
+    val sellValue: Double,
+    val isActive: Boolean,
+    val prestigeCount: Int,
+)
+
 /** Derived, read-only numbers the UI renders every frame. */
 data class GameView(
     val state: GameState,
+    val ball: BallState,
+    val type: BallTypeDef,
     /** Unsigned RPM. */
     val rpm: Double,
     /** +1 clockwise seen from above the cap, -1 counter-clockwise. */
@@ -31,11 +48,28 @@ data class GameView(
     val turboCapMultiplier: Double,
     val motorRpm: Double,
     val zenOnReset: Long,
-    /** 0 none, 1 sparks, 2 flames, 3 lightning, 4 plasma. See [Stats.fxTiers]. */
+    /** 0 none .. 7 quantum. See [Stats.fxTiers]. */
     val fxTier: Int,
     val fingerTouching: Boolean,
     val bodyColor: Long,
     val capColor: Long,
+    val auraColor: Long,
+    val outerSkin: SkinDef?,
+    val interiorSkin: SkinDef?,
+    /** Viewing the ball from above (circling) rather than from the side (swiping). */
+    val topView: Boolean,
+    val topViewUnlocked: Boolean,
+    val gems: Long,
+    val chestCost: Double,
+    val canOpenChest: Boolean,
+    val garageFull: Boolean,
+    val balls: List<BallSummary>,
+    /** Idle income from the balls that are not active. */
+    val garageIncomePerSecond: Double,
+    val sparkActive: Boolean,
+    val sparkRemaining: Double,
+    val buff: BuffKind?,
+    val buffRemaining: Double,
 ) {
     val points: Double get() = state.points
 

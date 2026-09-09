@@ -15,10 +15,14 @@ import kotlin.math.sqrt
  * The physical model, all angular quantities in rad, rad/s, rad/s²:
  *
  * - The ball has moment of inertia `I = inertia(flywheel)` (stock = 1).
- * - Bearing friction is Coulomb + viscous: `α = -(c_c + c_v·|ω|)·sign(ω) / I`.
+ * - Bearing friction is Coulomb + viscous: `α = -(c_c + c_v·|ω|)·sign(ω) / I`,
+ *   scaled by the ball type's drag trait.
+ * - Air drag grows with the square of speed: `α = -c_a·ω²·sign(ω)`, so it is
+ *   nothing at 500 RPM and the wall at 15,000. Aero Shell lowers `c_a`.
  * - The finger is a slipping clutch: it pulls the ball towards its own
  *   implied speed with rate `gripRate`, but can transmit at most
- *   `gripAccel` of acceleration (the rubber only grips so hard).
+ *   `gripAccel` of acceleration (the rubber only grips so hard). Braking with
+ *   the finger recovers energy as points once the Kinetic Harvester is fitted.
  * - The turbo (a squeeze of the ball) is a thrust proportional to how hard
  *   it is squeezed, burning fuel at the same rate.
  *
@@ -72,9 +76,14 @@ object Stats {
      */
     fun gripAccel(level: Int): Double = 30.0 * (1.0 + 0.6 * level)
 
+    /** Share of the speed lost to finger braking that comes back as points. */
+    fun kersFraction(level: Int): Double = min(1.0, 0.1 * level)
+
     // --- Friction --------------------------------------------------------
     const val BASE_VISCOUS = 0.35      // 1/s
     const val BASE_CONSTANT = 1.2      // rad/s²
+    /** Air drag coefficient, rad/s² per (rad/s)², before inertia. Nothing at 400 RPM, a wall past 4,000 without upgrades. */
+    const val BASE_AERO = 4.0e-4
 
     fun inertia(flywheelLevel: Int): Double = 1.0 + 0.5 * flywheelLevel
 
@@ -84,8 +93,11 @@ object Stats {
     fun constantFriction(bearingsLevel: Int, flywheelLevel: Int): Double =
         BASE_CONSTANT * 0.85.pow(bearingsLevel) / inertia(flywheelLevel)
 
+    fun aeroDrag(aeroLevel: Int): Double = BASE_AERO * 0.85.pow(aeroLevel)
+
     /** Drag as a percentage of the stock ball, for the shop. */
     fun dragPercent(bearingsLevel: Int): Double = 100.0 * 0.8.pow(bearingsLevel)
+    fun aeroPercent(aeroLevel: Int): Double = 100.0 * 0.85.pow(aeroLevel)
 
     // --- Idle ------------------------------------------------------------
     fun motorRpm(level: Int): Double = if (level <= 0) 0.0 else 15.0 * level * 1.08.pow(level)
@@ -95,6 +107,12 @@ object Stats {
 
     fun offlineEfficiency(gyroLevel: Int): Double = min(0.9, 0.25 + 0.1 * gyroLevel)
     fun offlineCapHours(gyroLevel: Int): Int = 2 + gyroLevel
+
+    /** Share of a garage ball's motor income earned while it is not the active ball. */
+    fun rackEfficiency(level: Int): Double = min(1.0, 0.35 + 0.1 * level)
+
+    /** Interest on the point balance, per second. Level 1 = 0.1% per minute. */
+    fun interestPerSecond(level: Int): Double = 0.001 * level / 60.0
 
     // --- Score -----------------------------------------------------------
     fun pointsPerRev(counterLevel: Int): Double = (1.0 + counterLevel) * 1.15.pow(counterLevel)
@@ -108,11 +126,13 @@ object Stats {
     /** Combo points lost per second below the threshold. */
     const val COMBO_DECAY_RATE = 0.5
     fun maxCombo(level: Int): Double = if (level <= 0) 0.0 else 0.5 * level
+    fun comboDecayFactor(lockLevel: Int): Double = 0.8.pow(lockLevel)
 
     fun zenMultiplier(zen: Long): Double = 1.0 + 0.1 * zen
 
     // --- Speed limit -----------------------------------------------------
     fun rpmCap(coolingLevel: Int): Double = 500.0 + 500.0 * coolingLevel
+    fun cryoFactor(level: Int): Double = 1.0 + 0.25 * level
 
     /** How fast speed above the cap bleeds off once the turbo is released, in 1/s. */
     const val OVER_CAP_DRAG = 3.0
@@ -130,16 +150,43 @@ object Stats {
     fun turboAccel(level: Int): Double = 80.0 + 25.0 * level
     /** Extra thrust (rad/s²) per unit of squeeze rate (1/s): a fast pinch kicks harder. */
     fun turboSqueezeGain(level: Int): Double = 15.0 + 3.0 * level
+    fun nitroFactor(level: Int): Double = 1.0 + 0.3 * level
     /** Braking (rad/s²) at a full squeeze with empty fuel. */
     const val TURBO_OVERHEAT_BRAKE = 60.0
+    fun heatSinkFactor(level: Int): Double = 0.85.pow(level)
     /** Income multiplier at a full squeeze. */
     const val TURBO_INCOME_MULT = 2.0
 
-    // --- Visual effect tiers ---------------------------------------------
-    /** RPM at which each effect tier starts: sparks, flames, lightning, plasma. */
-    val fxTiers: List<Double> = listOf(350.0, 900.0, 2000.0, 4000.0)
+    // --- Golden sparks -----------------------------------------------------
+    const val FIRST_SPARK_SECONDS = 90.0
+    /** Seconds between sparks. */
+    fun sparkInterval(luckyLevel: Int): Double = 300.0 * 0.9.pow(luckyLevel)
+    /** Seconds a spark stays on screen. */
+    const val SPARK_WINDOW = 12.0
+    fun frenzyDuration(luckyLevel: Int): Double = 30.0 + 3.0 * luckyLevel
+    const val FRENZY_MULT = 7.0
+    /** A jackpot pays this many minutes of current income. */
+    const val JACKPOT_MINUTES = 15.0
+    const val JACKPOT_MIN_POINTS = 100.0
+    const val RECHARGE_SECONDS = 20.0
+    const val WILD_GRIP_SECONDS = 20.0
+    const val WILD_GRIP_MULT = 3.0
 
-    /** 0 = none, 1 = sparks, 2 = flames, 3 = lightning, 4 = plasma. */
+    // --- Garage ----------------------------------------------------------
+    const val MAX_BALLS = 8
+    fun chestCost(ballsOwned: Int): Double = 25_000.0 * 3.0.pow((ballsOwned - 1).coerceAtLeast(0))
+    fun chestWeight(rarity: Rarity, luckLevel: Int): Double =
+        if (rarity == Rarity.COMMON) rarity.weight * 0.85.pow(luckLevel) else rarity.weight * (1.0 + 0.1 * luckLevel)
+    fun sellValue(ball: BallState): Double = BallTypes.get(ball.typeId).rarity.sellValue + 0.5 * ball.invested
+    /** Gems awarded when an upgrade reaches its maximum level. */
+    const val GEMS_PER_MAX = 3L
+    const val GEM_TOP_UP = 10L
+
+    // --- Visual effect tiers ---------------------------------------------
+    /** RPM at which each effect tier starts: sparks, flames, lightning, plasma, singularity, supernova, quantum. */
+    val fxTiers: List<Double> = listOf(350.0, 900.0, 2000.0, 4000.0, 8000.0, 16000.0, 32000.0)
+
+    /** 0 = none, 1 = sparks, 2 = flames, 3 = lightning, 4 = plasma, 5 = singularity, 6 = supernova, 7 = quantum. */
     fun fxTier(rpm: Double): Int = fxTiers.count { rpm >= it }
 
     // --- Prestige --------------------------------------------------------

@@ -3,14 +3,20 @@
     <string name="app_name">Stress Ball</string>
 
     <!-- Hints under the ball -->
-    <string name="hint_draw_circles">Draw circles on the ball, or swipe across it</string>
-    <string name="hint_keep_circling">Keep going. Faster strokes, more RPM</string>
+    <string name="hint_swipe">Swipe across the ball to roll it</string>
+    <string name="hint_circle">Circle the cap to spin it</string>
+    <string name="hint_keep_going">Keep going. Faster strokes, more RPM</string>
     <string name="hint_hold_to_brake">Hold the ball still to brake it</string>
     <string name="hint_pinch_turbo">Pinch the ball from top and bottom for turbo</string>
+    <string name="hint_spark">A golden spark! Tap it</string>
 
     <!-- Header / meter -->
     <string name="rate_format">%1$s / s  •  x%2$s</string>
+    <string name="garage_rate_format">+%1$s / s from the garage</string>
     <string name="zen_label">Zen</string>
+    <string name="gems_format">◆ %1$d</string>
+    <string name="gems_top_up">+10</string>
+    <string name="gems_hint">Gems come from maxing out upgrades. The +10 is free for now.</string>
     <string name="rpm_format">%1$s RPM</string>
     <string name="cap_format">max %1$s</string>
     <string name="best_format">best %1$s</string>
@@ -19,6 +25,7 @@
     <string name="badge_turbo">TURBO</string>
     <string name="badge_overheat">OVERHEATING</string>
     <string name="badge_motor">Motor idling</string>
+    <string name="badge_buff">%1$s %2$s</string>
 
     <!-- Turbo bar -->
     <string name="turbo_label">Turbo</string>
@@ -30,31 +37,66 @@
 
     <!-- Action bar -->
     <string name="upgrades_button">Upgrades</string>
-    <string name="style_button">Style</string>
+    <string name="garage_button">Garage</string>
+    <string name="skins_button">Skins</string>
     <string name="stats_button">Stats</string>
+    <string name="view_top">Top view</string>
+    <string name="view_side">Side view</string>
 
     <!-- Dialogs -->
     <string name="welcome_back_title">Welcome back</string>
-    <string name="welcome_back_body">You were away for %1$s. Gyro Memory kept the motor turning for %2$s at %3$d%% efficiency and earned %4$s points.</string>
+    <string name="welcome_back_body">You were away for %1$s. Your balls kept turning for %2$s at %3$d%% efficiency and earned %4$s points.</string>
     <string name="ok">Nice</string>
+    <string name="cancel">Cancel</string>
     <string name="zen_reset_title">Zen reset</string>
-    <string name="zen_reset_body">Let go of all points, upgrades and speed. In return you gain %1$d Zen, each permanently adding +10%% to all income. Looks, achievements and records stay.</string>
+    <string name="zen_reset_body">Let go of this ball\'s upgrades, its speed and your point balance. In return you gain %1$d Zen, each permanently adding +10%% to all income. Other balls, skins, achievements and records stay.</string>
     <string name="zen_reset_confirm">Reset for %1$d Zen</string>
     <string name="keep_spinning">Keep spinning</string>
     <string name="achievement_toast">Achievement: %1$s (+1 Zen)</string>
+    <string name="spark_toast">%1$s! %2$s</string>
+    <string name="chest_result_title">New ball!</string>
+    <string name="chest_result_switch">Play it now</string>
+    <string name="chest_result_keep">Keep current</string>
+    <string name="sell_title">Sell %1$s?</string>
+    <string name="sell_body">You get %1$s points back. Its upgrades are gone for good.</string>
+    <string name="sell_confirm">Sell</string>
 
     <!-- Upgrades sheet -->
     <string name="upgrades_title">Upgrades</string>
+    <string name="upgrades_hint">Maxing an upgrade awards ◆ %1$d gems.</string>
     <string name="points_short">%1$s pts</string>
     <string name="level_format">Lv %1$d / %2$d</string>
+    <string name="scope_account">all balls</string>
     <string name="now_format">Now: %1$s</string>
     <string name="next_format">Next: %1$s</string>
     <string name="max_label">MAX</string>
     <string name="zen_card_title">☯ Zen reset</string>
-    <string name="zen_card_body">Give up this run for a permanent +10%% income per Zen. Zen so far: %1$d (x%2$s).</string>
+    <string name="zen_card_body">Give up this ball\'s run for a permanent +10%% income per Zen. Zen so far: %1$d (x%2$s).</string>
     <string name="zen_card_run">This run: %1$s pts. Next Zen at %2$s pts.</string>
     <string name="zen_card_button">Reset for %1$d Zen</string>
-    <string name="zen_card_locked">Earn 1M points this run to unlock</string>
+    <string name="zen_card_locked">Earn 1M points on this ball to unlock</string>
+
+    <!-- Garage sheet -->
+    <string name="garage_title">Garage</string>
+    <string name="garage_income">Garage balls earn +%1$s / s while you play another</string>
+    <string name="chest_title">Ball chest</string>
+    <string name="chest_body">%1$d of %2$d balls. Every chest holds a random ball; the price triples each time.</string>
+    <string name="chest_odds">Legendary or better: %1$s%%</string>
+    <string name="chest_open">Open chest  •  %1$s pts</string>
+    <string name="chest_full">Garage full</string>
+    <string name="ball_stats">%1$s RPM  •  %2$s / s  •  Lv %3$d</string>
+    <string name="ball_active">PLAYING</string>
+    <string name="ball_switch">Play</string>
+    <string name="ball_sell">Sell %1$s</string>
+
+    <!-- Skins sheet -->
+    <string name="skins_title">Skins</string>
+    <string name="skin_equip">Equip</string>
+    <string name="skin_equipped">Active</string>
+    <string name="skin_unequip">Remove</string>
+    <string name="language_title">Language</string>
+    <string name="language_en">English</string>
+    <string name="language_tr">Türkçe</string>
 
     <!-- Stats sheet -->
     <string name="stats_title">Stats</string>
@@ -62,18 +104,15 @@
     <string name="stat_revolutions">Total revolutions</string>
     <string name="stat_lifetime_points">Lifetime points</string>
     <string name="stat_run_points">Points this run</string>
+    <string name="stat_balls">Balls</string>
+    <string name="stat_chests">chests</string>
+    <string name="stat_sold">sold</string>
+    <string name="stat_gems">Gems</string>
     <string name="stat_zen">Zen</string>
     <string name="stat_resets">Zen resets</string>
+    <string name="stat_sparks">Sparks caught</string>
     <string name="stat_play_time">Play time</string>
     <string name="stat_achievements">Achievements</string>
     <string name="challenges_title">Challenges</string>
     <string name="challenge_reward">+1 Zen</string>
-
-    <!-- Style sheet -->
-    <string name="style_title">Style</string>
-    <string name="equipped_label">Equipped</string>
-    <string name="equip_button">Equip</string>
-    <string name="language_title">Language</string>
-    <string name="language_en">English</string>
-    <string name="language_tr">Türkçe</string>
 </resources>

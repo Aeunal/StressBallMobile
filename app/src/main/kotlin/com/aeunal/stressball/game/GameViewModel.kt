@@ -3,12 +3,15 @@ package com.aeunal.stressball.game
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aeunal.stressball.core.BallState
+import com.aeunal.stressball.core.BuffKind
 import com.aeunal.stressball.core.FingerSample
 import com.aeunal.stressball.core.GameEngine
 import com.aeunal.stressball.core.GameState
 import com.aeunal.stressball.core.GameView
 import com.aeunal.stressball.core.Language
 import com.aeunal.stressball.core.OfflineReport
+import com.aeunal.stressball.core.SkinSlot
 import com.aeunal.stressball.data.SaveRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,8 @@ import kotlinx.coroutines.launch
 sealed interface GameEvent {
     data class AchievementUnlocked(val id: String) : GameEvent
     data class Offline(val report: OfflineReport) : GameEvent
+    data class ChestOpened(val ball: BallState) : GameEvent
+    data class SparkCaught(val kind: BuffKind) : GameEvent
 }
 
 /**
@@ -66,7 +71,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var fingerDown = false
     private var twist = 0.0
     private var drag = 0.0
-    private var circularity = 1.0
     private var lastMoveNanos = 0L
 
     // Pinch state. The squeeze rate is the positive derivative of the weight.
@@ -119,7 +123,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (fingerDown) {
                     val moving = now - lastMoveNanos < MOVE_HOLD_NANOS
-                    if (moving) engine.setFinger(true, twist, drag, circularity) else engine.setFinger(true)
+                    if (moving) engine.setFinger(true, twist, drag) else engine.setFinger(true)
                 } else {
                     engine.setFinger(false)
                 }
@@ -146,7 +150,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         fingerDown = true
         twist = 0.0
         drag = 0.0
-        circularity = 1.0
         lastMoveNanos = 0L
         engine.setFinger(true)
         _view.value = engine.view()
@@ -159,11 +162,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (lastMoveNanos == 0L) {
             twist = sample.twistOmega
             drag = sample.dragOmega
-            circularity = sample.circularity
         } else {
             twist = twist * 0.5 + sample.twistOmega * 0.5
             drag = drag * 0.5 + sample.dragOmega * 0.5
-            circularity = circularity * 0.7 + sample.circularity * 0.3
         }
         lastMoveNanos = System.nanoTime()
     }
@@ -198,19 +199,53 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _view.value = engine.view()
     }
 
-    fun buy(id: String) {
-        val before = engine.state
-        if (engine.buy(id)) publish(before)
+    fun setTopView(top: Boolean) {
+        if (engine.setTopView(top)) {
+            onFingerUp()
+            _view.value = engine.view()
+        }
     }
 
-    fun buyCosmetic(id: String) {
+    fun tapSpark() {
         val before = engine.state
-        if (engine.buyCosmetic(id)) publish(before)
+        engine.tapSpark()?.let { emit(GameEvent.SparkCaught(it)) }
+        publish(before)
     }
 
-    fun equipCosmetic(id: String) {
+    // ------------------------------------------------------------------
+    // Shop, garage, skins
+    // ------------------------------------------------------------------
+
+    fun buy(id: String) = mutate { engine.buy(id) }
+
+    fun topUpGems() = mutate { engine.topUpGems(); true }
+
+    fun buySkin(id: String) = mutate { engine.buySkin(id) }
+
+    fun equipSkin(id: String) = mutate { engine.equipSkin(id) }
+
+    fun unequipSkin(slot: SkinSlot) = mutate { engine.unequipSkin(slot); true }
+
+    fun openChest() {
         val before = engine.state
-        if (engine.equipCosmetic(id)) publish(before)
+        val ball = engine.openChest()
+        if (ball != null) {
+            emit(GameEvent.ChestOpened(ball))
+            publish(before)
+            saveNow()
+        }
+    }
+
+    fun switchBall(id: String) {
+        onFingerUp()
+        onPinchEnd()
+        mutate { engine.switchBall(id) }
+    }
+
+    fun sellBall(id: String) {
+        onFingerUp()
+        onPinchEnd()
+        if (mutate { engine.sellBall(id) }) saveNow()
     }
 
     fun setLanguage(language: Language?) {
@@ -218,12 +253,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun prestige(): Boolean {
-        val before = engine.state
-        val ok = engine.prestige()
-        if (ok) {
-            publish(before)
-            saveNow()
-        }
+        val ok = mutate { engine.prestige() }
+        if (ok) saveNow()
         return ok
     }
 
@@ -234,6 +265,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
+
+    private fun mutate(action: () -> Boolean): Boolean {
+        val before = engine.state
+        val ok = action()
+        if (ok) publish(before)
+        return ok
+    }
 
     private fun publish(before: GameState) {
         val after = engine.state

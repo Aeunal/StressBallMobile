@@ -4,13 +4,16 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
+import kotlin.random.Random
 
 /**
  * The deterministic simulation behind the game.
  *
- * The engine owns a [GameState] and mutates it through a small set of
- * operations. All time-dependent behaviour goes through [tick], which makes
- * the engine trivial to unit test and to run at any frame rate.
+ * The engine owns a [GameState] (the whole profile) and mutates it through a
+ * small set of operations. All time-dependent behaviour goes through [tick],
+ * which makes the engine trivial to unit test and to run at any frame rate.
+ * Physics runs on the active ball; garage balls idle at their motor floor and
+ * earn a share of that income.
  *
  * Inputs ([setFinger], [setTurbo]) are "current controls": set them whenever
  * they change and the next ticks use them. They are not persisted.
@@ -18,7 +21,10 @@ import kotlin.math.sign
  *
  * Not thread-safe: drive it from a single thread (the UI's game loop).
  */
-class GameEngine(initial: GameState = GameState()) {
+class GameEngine(
+    initial: GameState = GameState(),
+    private val random: Random = Random.Default,
+) {
 
     var state: GameState = initial
         private set
@@ -34,10 +40,6 @@ class GameEngine(initial: GameState = GameState()) {
     var fingerDrag: Double = 0.0
         private set
 
-    /** 0 = straight stroke across the face, 1 = circle around the centre. */
-    var fingerCircularity: Double = 1.0
-        private set
-
     /** How hard the ball is squeezed, 0..1. */
     var turboWeight: Double = 0.0
         private set
@@ -46,6 +48,8 @@ class GameEngine(initial: GameState = GameState()) {
     var squeezeRate: Double = 0.0
         private set
 
+    val active: BallState get() = state.active
+
     // --------------------------------------------------------------------
     // Inputs
     // --------------------------------------------------------------------
@@ -53,20 +57,14 @@ class GameEngine(initial: GameState = GameState()) {
     /**
      * Reports the finger. While [touching], the ball is gripped: it chases the
      * speed the finger implies, which also means a finger held still brakes
-     * the ball. A circling finger ([twistOmega], weighted by [circularity])
-     * twists it like the cap; a stroke across the face ([dragOmega]) rolls it
-     * like a real ball.
+     * the ball. Which reading is used depends on the view: from the side a
+     * stroke across the face rolls the ball ([dragOmega]); from above a
+     * circling finger twists it like the cap ([twistOmega]).
      */
-    fun setFinger(
-        touching: Boolean,
-        twistOmega: Double = 0.0,
-        dragOmega: Double = 0.0,
-        circularity: Double = 1.0,
-    ) {
+    fun setFinger(touching: Boolean, twistOmega: Double = 0.0, dragOmega: Double = 0.0) {
         fingerTouching = touching
         fingerTwist = if (touching && twistOmega.isFinite()) twistOmega else 0.0
         fingerDrag = if (touching && dragOmega.isFinite()) dragOmega else 0.0
-        fingerCircularity = if (circularity.isFinite()) circularity.coerceIn(0.0, 1.0) else 1.0
     }
 
     /**
@@ -79,23 +77,47 @@ class GameEngine(initial: GameState = GameState()) {
         this.squeezeRate = if (squeezeRate.isFinite()) max(0.0, squeezeRate) else 0.0
     }
 
-    /** Speed the finger is asking for right now. */
-    fun fingerTarget(): Double = Stats.fingerTarget(
-        fingerTwist, fingerDrag, fingerCircularity,
-        state.level(Upgrades.GEAR), state.level(Upgrades.TRACTION),
-    )
+    /** Speed the finger is asking for right now, for the current view. */
+    fun fingerTarget(): Double {
+        val b = active
+        val circularity = if (b.topView) 1.0 else 0.0
+        return Stats.fingerTarget(fingerTwist, fingerDrag, circularity, b.level(Upgrades.GEAR), b.level(Upgrades.TRACTION))
+    }
 
-    /** Buys one level of [id] if affordable and below max level. */
+    /** Looks at the ball from above (needs the Gimbal Mount) or back from the side. */
+    fun setTopView(top: Boolean): Boolean {
+        if (top && active.level(Upgrades.GIMBAL) <= 0) return false
+        updateActive { it.copy(topView = top) }
+        return true
+    }
+
+    // --------------------------------------------------------------------
+    // Shop
+    // --------------------------------------------------------------------
+
+    /** Buys one level of [id] (on the active ball or the account) if affordable and below max level. */
     fun buy(id: String): Boolean {
         val def = Upgrades.get(id)
         val level = state.level(id)
         if (level >= def.maxLevel) return false
         val cost = def.costAt(level)
         if (state.points < cost) return false
-        state = state.copy(
-            points = state.points - cost,
-            upgrades = state.upgrades + (id to level + 1),
-        )
+        val newLevel = level + 1
+        val gemReward = if (newLevel >= def.maxLevel) Stats.GEMS_PER_MAX else 0L
+        state = if (def.scope == UpgradeScope.ACCOUNT) {
+            state.copy(
+                points = state.points - cost,
+                gems = state.gems + gemReward,
+                accountUpgrades = state.accountUpgrades + (id to newLevel),
+            )
+        } else {
+            val b = active
+            state.copy(
+                points = state.points - cost,
+                gems = state.gems + gemReward,
+                balls = replaceBall(b.copy(upgrades = b.upgrades + (id to newLevel), invested = b.invested + cost)),
+            )
+        }
         unlockAchievements()
         return true
     }
@@ -106,50 +128,155 @@ class GameEngine(initial: GameState = GameState()) {
         return level < def.maxLevel && state.points >= def.costAt(level)
     }
 
-    /** Buys a cosmetic with points and equips it. Returns false if unaffordable or already owned. */
-    fun buyCosmetic(id: String): Boolean {
-        val def = Cosmetics.byId[id] ?: return false
-        if (Cosmetics.isOwned(state, id)) return false
-        if (state.points < def.cost) return false
+    /** Free gems, for now. */
+    fun topUpGems() {
+        state = state.copy(gems = state.gems + Stats.GEM_TOP_UP)
+        unlockAchievements()
+    }
+
+    /** Buys a skin with gems and equips it. */
+    fun buySkin(id: String): Boolean {
+        val def = Skins.byId[id] ?: return false
+        if (Skins.isOwned(state, id) || state.gems < def.gems) return false
+        state = state.copy(gems = state.gems - def.gems, ownedSkins = state.ownedSkins + id)
+        equipSkin(id)
+        unlockAchievements()
+        return true
+    }
+
+    /** Equips an owned skin in its slot, replacing whatever was there. */
+    fun equipSkin(id: String): Boolean {
+        val def = Skins.byId[id] ?: return false
+        if (!Skins.isOwned(state, id)) return false
+        state = when (def.slot) {
+            SkinSlot.OUTER -> state.copy(outerSkin = id)
+            SkinSlot.INTERIOR -> state.copy(interiorSkin = id)
+        }
+        return true
+    }
+
+    fun unequipSkin(slot: SkinSlot) {
+        state = when (slot) {
+            SkinSlot.OUTER -> state.copy(outerSkin = null)
+            SkinSlot.INTERIOR -> state.copy(interiorSkin = null)
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // Garage
+    // --------------------------------------------------------------------
+
+    fun chestCost(): Double = Stats.chestCost(state.balls.size)
+
+    fun canOpenChest(): Boolean = state.balls.size < Stats.MAX_BALLS && state.points >= chestCost()
+
+    /** Pays for a chest and adds the ball it contains. Returns the new ball, or null. */
+    fun openChest(): BallState? {
+        if (!canOpenChest()) return null
+        val cost = chestCost()
+        val type = BallTypes.roll(random, state.accountLevel(Upgrades.CHEST_LUCK))
+        val ball = BallState(id = "b${state.nextBallNumber}", typeId = type.id)
         state = state.copy(
-            points = state.points - def.cost,
-            ownedCosmetics = state.ownedCosmetics + id,
-            equipped = state.equipped + (def.slot.name to id),
+            points = state.points - cost,
+            balls = state.balls + ball,
+            nextBallNumber = state.nextBallNumber + 1,
+            chestsOpened = state.chestsOpened + 1,
+        )
+        unlockAchievements()
+        return ball
+    }
+
+    /** Makes [id] the ball being played. */
+    fun switchBall(id: String): Boolean {
+        if (state.ball(id) == null || id == state.activeBallId) return false
+        state = state.copy(activeBallId = id)
+        setFinger(false)
+        setTurbo(0.0)
+        return true
+    }
+
+    /** Sells a ball for its rarity value plus half of what was invested. The last ball cannot be sold. */
+    fun sellBall(id: String): Boolean {
+        val ball = state.ball(id) ?: return false
+        if (state.balls.size <= 1) return false
+        val remaining = state.balls.filter { it.id != id }
+        state = state.copy(
+            points = state.points + Stats.sellValue(ball),
+            balls = remaining,
+            activeBallId = if (state.activeBallId == id) remaining.first().id else state.activeBallId,
+            ballsSold = state.ballsSold + 1,
         )
         unlockAchievements()
         return true
     }
 
-    /** Equips an owned cosmetic. Returns false if unknown or not owned. */
-    fun equipCosmetic(id: String): Boolean {
-        val def = Cosmetics.byId[id] ?: return false
-        if (!Cosmetics.isOwned(state, id)) return false
-        state = state.copy(equipped = state.equipped + (def.slot.name to id))
-        return true
+    // --------------------------------------------------------------------
+    // Golden sparks
+    // --------------------------------------------------------------------
+
+    /** Taps the golden spark if one is showing; grants a random buff. Returns it. */
+    fun tapSpark(): BuffKind? {
+        if (state.sparkRemaining <= 0.0) return null
+        val lucky = state.accountLevel(Upgrades.LUCKY)
+        val r = random.nextDouble()
+        val kind = when {
+            r < 0.40 -> BuffKind.FRENZY
+            r < 0.65 -> BuffKind.JACKPOT
+            r < 0.85 -> BuffKind.RECHARGE
+            else -> BuffKind.WILD_GRIP
+        }
+        var s = state.copy(
+            sparkRemaining = 0.0,
+            sparkTimer = Stats.sparkInterval(lucky),
+            sparksTapped = state.sparksTapped + 1,
+        )
+        s = when (kind) {
+            BuffKind.FRENZY -> s.copy(buff = kind, buffRemaining = Stats.frenzyDuration(lucky))
+            BuffKind.JACKPOT -> {
+                val payout = max(Stats.JACKPOT_MIN_POINTS, incomePerSecond(s) * 60.0 * Stats.JACKPOT_MINUTES)
+                s.copy(
+                    points = s.points + payout,
+                    totalPointsEarned = s.totalPointsEarned + payout,
+                    balls = s.balls.map { if (it.id == s.activeBallId) it.copy(pointsThisRun = it.pointsThisRun + payout) else it },
+                )
+            }
+            BuffKind.RECHARGE -> s.copy(
+                buff = kind, buffRemaining = Stats.RECHARGE_SECONDS,
+                balls = s.balls.map { if (it.id == s.activeBallId) it.copy(turboCharge = 1.0, turboCooldown = 0.0) else it },
+            )
+            BuffKind.WILD_GRIP -> s.copy(buff = kind, buffRemaining = Stats.WILD_GRIP_SECONDS)
+        }
+        state = s
+        unlockAchievements()
+        return kind
     }
 
-    /** Zen the player would receive from a reset right now. */
-    fun zenOnReset(): Long = Stats.zenFor(state.pointsThisRun)
+    // --------------------------------------------------------------------
+    // Prestige, load, save
+    // --------------------------------------------------------------------
+
+    /** Zen the player would receive from resetting the active ball right now. */
+    fun zenOnReset(): Long = Stats.zenFor(active.pointsThisRun)
 
     /**
-     * Prestige: trade all points, upgrades and speed for Zen, which multiplies
-     * income permanently. Cosmetics, records and achievements are kept.
-     * Returns false if the reset would grant no Zen.
+     * Prestige the active ball: its upgrades, speed and the point balance are
+     * given up for Zen, which multiplies income permanently. Other balls,
+     * skins, records and achievements are kept.
      */
     fun prestige(): Boolean {
         val gain = zenOnReset()
         if (gain <= 0) return false
-        state = GameState(
+        val b = active
+        state = state.copy(
+            points = 0.0,
             zen = state.zen + gain,
-            prestigeCount = state.prestigeCount + 1,
-            totalPointsEarned = state.totalPointsEarned,
-            bestRpm = state.bestRpm,
-            totalRevolutions = state.totalRevolutions,
-            playTimeSeconds = state.playTimeSeconds,
-            achievements = state.achievements,
-            ownedCosmetics = state.ownedCosmetics,
-            equipped = state.equipped,
-            lastSavedEpochMs = state.lastSavedEpochMs,
+            balls = replaceBall(
+                BallState(
+                    id = b.id, typeId = b.typeId,
+                    totalRevolutions = b.totalRevolutions, bestRpm = b.bestRpm,
+                    prestigeCount = b.prestigeCount + 1,
+                ),
+            ),
         )
         unlockAchievements()
         return true
@@ -186,37 +313,65 @@ class GameEngine(initial: GameState = GameState()) {
 
     private fun step(dt: Double) {
         val s = state
-        val bearings = s.level(Upgrades.BEARINGS)
-        val flywheel = s.level(Upgrades.FLYWHEEL)
-        val turboLevel = s.level(Upgrades.OVERDRIVE)
-        val baseCap = rpmToOmega(Stats.rpmCap(s.level(Upgrades.COOLING)))
+        val b = s.active
+        val type = BallTypes.get(b.typeId)
+        val skin = Skins.buff(s)
+        val bearings = b.level(Upgrades.BEARINGS)
+        val flywheel = b.level(Upgrades.FLYWHEEL)
+        val turboLevel = b.level(Upgrades.OVERDRIVE)
+        val baseCap = rpmToOmega(baseRpmCap(b, type, skin))
 
-        var omega = s.omega
-        var charge = s.turboCharge
-        var cooldown = s.turboCooldown
+        // 0. Timers: buff and golden spark.
+        val buffRemaining = max(0.0, s.buffRemaining - dt)
+        val buff = if (buffRemaining > 0.0) s.buff else null
+        var sparkRemaining = s.sparkRemaining
+        var sparkTimer = s.sparkTimer
+        if (sparkRemaining > 0.0) {
+            sparkRemaining = max(0.0, sparkRemaining - dt)
+            if (sparkRemaining == 0.0) sparkTimer = Stats.sparkInterval(s.accountLevel(Upgrades.LUCKY))
+        } else {
+            sparkTimer -= dt
+            if (sparkTimer <= 0.0) {
+                sparkRemaining = Stats.SPARK_WINDOW
+                sparkTimer = 0.0
+            }
+        }
+
+        var omega = b.omega
+        var charge = b.turboCharge
+        var cooldown = b.turboCooldown
         val w = turboWeight
         val boosting = w > 0.0 && charge > 0.0
+        var recovered = 0.0 // speed shed by finger braking, for the Kinetic Harvester
 
         // 1. Finger: a slipping clutch. Pull towards the implied speed at the
         //    grip rate, but never harder than the rubber can transmit.
         if (fingerTouching) {
             val target = fingerTarget()
-            val k = min(1.0, Stats.gripRate(s.level(Upgrades.GRIP)) * dt)
-            val limit = Stats.gripAccel(s.level(Upgrades.GRIP)) * dt
-            omega += ((target - omega) * k).coerceIn(-limit, limit)
+            val k = min(1.0, Stats.gripRate(b.level(Upgrades.GRIP)) * dt)
+            val wild = if (buff == BuffKind.WILD_GRIP) Stats.WILD_GRIP_MULT else 1.0
+            val limit = Stats.gripAccel(b.level(Upgrades.GRIP)) * type.traits.grip * skin.grip * wild * dt
+            val next = omega + ((target - omega) * k).coerceIn(-limit, limit)
+            if (abs(next) < abs(omega)) recovered += abs(omega) - abs(next)
+            omega = next
         }
 
         // 2. Turbo: thrust and fuel burn scale with the squeeze; a fast pinch
         //    kicks extra. Squeezing an empty tank brakes. Fuel only refills
         //    after a cooldown that every squeeze restarts.
+        val capacity = Stats.turboCapacity(turboLevel) * type.traits.turbo * skin.turboFuel
         if (w > 0.0) {
             if (charge > 0.0) {
                 val dir = if (omega < 0.0) -1.0 else 1.0
-                val thrust = Stats.turboAccel(turboLevel) * w + Stats.turboSqueezeGain(turboLevel) * squeezeRate
+                val thrust = Stats.turboAccel(turboLevel) * w +
+                    Stats.turboSqueezeGain(turboLevel) * Stats.nitroFactor(b.level(Upgrades.NITRO)) * squeezeRate
                 omega += dir * thrust * dt
-                charge = max(0.0, charge - w * dt / Stats.turboCapacity(turboLevel))
+                if (buff != BuffKind.RECHARGE) charge = max(0.0, charge - w * dt / capacity)
             } else {
-                omega = towardsZero(omega, Stats.TURBO_OVERHEAT_BRAKE * w * dt)
+                val brake = Stats.TURBO_OVERHEAT_BRAKE * Stats.heatSinkFactor(b.level(Upgrades.HEATSINK)) * w * dt
+                val next = towardsZero(omega, brake)
+                recovered += abs(omega) - abs(next)
+                omega = next
             }
             cooldown = Stats.turboCooldown(turboLevel)
         } else if (cooldown > 0.0) {
@@ -225,14 +380,15 @@ class GameEngine(initial: GameState = GameState()) {
             charge = min(1.0, charge + dt / Stats.turboRefill(turboLevel))
         }
 
-        // 3. Bearing friction: Coulomb + viscous, divided by inertia.
+        // 3. Bearing friction (Coulomb + viscous over inertia) and air drag.
         val beforeFriction = omega
-        val decel = Stats.viscousFriction(bearings, flywheel) * abs(omega) + Stats.constantFriction(bearings, flywheel)
-        omega = towardsZero(omega, decel * dt)
+        val bearing = (Stats.viscousFriction(bearings, flywheel) * abs(omega) + Stats.constantFriction(bearings, flywheel)) * type.traits.drag
+        val aero = Stats.aeroDrag(b.level(Upgrades.AERO)) * omega * omega / Stats.inertia(flywheel)
+        omega = towardsZero(omega, (bearing + aero) * dt)
 
         // 4. Motor floor: once the ball is at its idle speed friction cannot
         //    slow it below that; from rest it ramps up towards the floor.
-        val motorOmega = rpmToOmega(Stats.motorRpm(s.level(Upgrades.MOTOR)))
+        val motorOmega = rpmToOmega(motorRpm(b, skin))
         if (motorOmega > 0.0 && abs(omega) < motorOmega) {
             val dir = if (beforeFriction < 0.0) -1.0 else 1.0
             val before = abs(beforeFriction)
@@ -243,35 +399,49 @@ class GameEngine(initial: GameState = GameState()) {
         // 5. Speed limit. The squeeze raises the cap in proportion; speed left
         //    above the current cap bleeds off instead of snapping.
         val boostedCap = if (boosting) baseCap * (1.0 + w * (Stats.turboCapMultiplier(turboLevel) - 1.0)) else baseCap
-        val excess = abs(s.omega) - boostedCap
+        val excess = abs(b.omega) - boostedCap
         val ceiling = if (excess < OVER_CAP_SNAP) boostedCap else boostedCap + excess * (1.0 - min(1.0, Stats.OVER_CAP_DRAG * dt))
         if (abs(omega) > ceiling) omega = sign(omega) * ceiling
 
         // 6. Resonance combo.
         val rpm = omegaToRpm(abs(omega))
-        val maxCombo = Stats.maxCombo(s.level(Upgrades.RESONANCE))
+        val maxCombo = Stats.maxCombo(b.level(Upgrades.RESONANCE)) * skin.comboMax
         var combo = if (rpm >= Stats.RESONANCE_THRESHOLD_RPM) {
-            s.combo + Stats.COMBO_BUILD_RATE * dt
+            b.combo + Stats.COMBO_BUILD_RATE * dt
         } else {
-            s.combo - Stats.COMBO_DECAY_RATE * dt
+            b.combo - Stats.COMBO_DECAY_RATE * Stats.comboDecayFactor(b.level(Upgrades.COMBO_LOCK)) * dt
         }
         combo = combo.coerceIn(0.0, maxCombo)
 
-        // 7. Income.
+        // 7. Income: the active ball, energy recovered while braking, the
+        //    garage, and interest.
+        val perRev = incomePerRevolution(s, b, type, skin, rpm, combo, if (boosting) w else 0.0, buff)
         val revolutions = abs(omega) / TWO_PI * dt
-        val earned = revolutions * incomePerRevolution(s, rpm, combo, if (boosting) w else 0.0)
+        val kers = recovered / TWO_PI * Stats.kersFraction(b.level(Upgrades.KERS)) * perRev
+        val activeEarned = revolutions * perRev + kers
+        val garageEarned = garageIncomePerSecond(s) * dt
+        val interest = s.points * Stats.interestPerSecond(s.accountLevel(Upgrades.INTEREST)) * dt
+        val earned = activeEarned + garageEarned + interest
 
         state = s.copy(
-            omega = omega,
-            combo = combo,
-            turboCharge = charge,
-            turboCooldown = cooldown,
             points = s.points + earned,
-            pointsThisRun = s.pointsThisRun + earned,
             totalPointsEarned = s.totalPointsEarned + earned,
-            totalRevolutions = s.totalRevolutions + revolutions,
-            bestRpm = max(s.bestRpm, rpm),
             playTimeSeconds = s.playTimeSeconds + dt,
+            buff = buff,
+            buffRemaining = buffRemaining,
+            sparkTimer = sparkTimer,
+            sparkRemaining = sparkRemaining,
+            balls = replaceBall(
+                b.copy(
+                    omega = omega,
+                    combo = combo,
+                    turboCharge = charge,
+                    turboCooldown = cooldown,
+                    pointsThisRun = b.pointsThisRun + activeEarned,
+                    totalRevolutions = b.totalRevolutions + revolutions,
+                    bestRpm = max(b.bestRpm, rpm),
+                ),
+            ),
         )
         unlockAchievements()
     }
@@ -280,19 +450,65 @@ class GameEngine(initial: GameState = GameState()) {
     private fun towardsZero(value: Double, amount: Double): Double =
         if (abs(value) <= amount) 0.0 else value - sign(value) * amount
 
-    private fun incomePerRevolution(s: GameState, rpm: Double, combo: Double, boostWeight: Double): Double =
-        Stats.pointsPerRev(s.level(Upgrades.COUNTER)) * totalMultiplier(s, rpm, combo, boostWeight)
+    private fun replaceBall(ball: BallState): List<BallState> = state.balls.map { if (it.id == ball.id) ball else it }
 
-    private fun totalMultiplier(s: GameState, rpm: Double, combo: Double, boostWeight: Double): Double {
-        val petals = if (petalsOpen(s, rpm)) Stats.petalMultiplier(s.level(Upgrades.PETALS)) else 1.0
+    private fun updateActive(f: (BallState) -> BallState) {
+        state = state.copy(balls = replaceBall(f(active)))
+    }
+
+    // --------------------------------------------------------------------
+    // Formulas shared by the step, the view and offline progress
+    // --------------------------------------------------------------------
+
+    private fun baseRpmCap(b: BallState, type: BallTypeDef, skin: SkinBuff): Double =
+        Stats.rpmCap(b.level(Upgrades.COOLING)) * Stats.cryoFactor(b.level(Upgrades.CRYO)) * type.traits.cap * skin.cap
+
+    private fun motorRpm(b: BallState, skin: SkinBuff): Double = Stats.motorRpm(b.level(Upgrades.MOTOR)) * skin.motor
+
+    private fun petalsOpen(b: BallState, rpm: Double): Boolean =
+        b.level(Upgrades.PETALS) > 0 && rpm >= Stats.PETAL_THRESHOLD_RPM
+
+    private fun totalMultiplier(
+        s: GameState, b: BallState, type: BallTypeDef, skin: SkinBuff,
+        rpm: Double, combo: Double, boostWeight: Double, buff: BuffKind?,
+    ): Double {
+        val petals = if (petalsOpen(b, rpm)) Stats.petalMultiplier(b.level(Upgrades.PETALS)) else 1.0
         val resonance = 1.0 + combo
         val zen = Stats.zenMultiplier(s.zen)
         val turbo = 1.0 + boostWeight * (Stats.TURBO_INCOME_MULT - 1.0)
-        return petals * resonance * zen * turbo
+        val frenzy = if (buff == BuffKind.FRENZY) Stats.FRENZY_MULT else 1.0
+        return petals * resonance * zen * turbo * frenzy * type.traits.income * skin.income
     }
 
-    private fun petalsOpen(s: GameState, rpm: Double): Boolean =
-        s.level(Upgrades.PETALS) > 0 && rpm >= Stats.PETAL_THRESHOLD_RPM
+    private fun incomePerRevolution(
+        s: GameState, b: BallState, type: BallTypeDef, skin: SkinBuff,
+        rpm: Double, combo: Double, boostWeight: Double, buff: BuffKind?,
+    ): Double = Stats.pointsPerRev(b.level(Upgrades.COUNTER)) * totalMultiplier(s, b, type, skin, rpm, combo, boostWeight, buff)
+
+    /** Idle income of one ball at its motor floor, before garage/offline efficiency. */
+    private fun motorIncomePerSecond(s: GameState, b: BallState): Double {
+        val type = BallTypes.get(b.typeId)
+        val skin = if (b.id == s.activeBallId) Skins.buff(s) else SkinBuff.NONE
+        val motor = motorRpm(b, skin)
+        if (motor <= 0.0) return 0.0
+        return rpmToOmega(motor) / TWO_PI * incomePerRevolution(s, b, type, skin, motor, 0.0, 0.0, null)
+    }
+
+    /** Income per second of every ball that is not being played. */
+    fun garageIncomePerSecond(s: GameState = state): Double {
+        val rack = Stats.rackEfficiency(s.accountLevel(Upgrades.RACK))
+        return s.balls.filter { it.id != s.activeBallId }.sumOf { motorIncomePerSecond(s, it) } * rack
+    }
+
+    /** The active ball's current income per second (no garage, no interest). */
+    private fun incomePerSecond(s: GameState): Double {
+        val b = s.active
+        val type = BallTypes.get(b.typeId)
+        val skin = Skins.buff(s)
+        val rpm = b.rpm
+        val boosting = turboWeight > 0.0 && b.turboCharge > 0.0
+        return abs(b.omega) / TWO_PI * incomePerRevolution(s, b, type, skin, rpm, b.combo, if (boosting) turboWeight else 0.0, s.activeBuff)
+    }
 
     private fun unlockAchievements() {
         val fresh = Achievements.newlyMet(state)
@@ -310,9 +526,10 @@ class GameEngine(initial: GameState = GameState()) {
 
     /**
      * Credits income for time spent away, based on the state saved at
-     * [GameState.lastSavedEpochMs]. Only the motor's idle speed earns offline
-     * (the ball is assumed to have coasted to its floor), scaled by the Gyro
-     * Memory efficiency and capped in duration.
+     * [GameState.lastSavedEpochMs]. Every ball is assumed to have coasted to
+     * its motor floor: the active one earns at its Gyro Memory efficiency,
+     * garage balls at the rack's share of that. Duration is capped by the
+     * active ball's Gyro Memory.
      */
     fun applyOfflineProgress(nowEpochMs: Long): OfflineReport? {
         val last = state.lastSavedEpochMs
@@ -320,26 +537,32 @@ class GameEngine(initial: GameState = GameState()) {
         val secondsAway = (nowEpochMs - last) / 1000.0
         if (secondsAway < MIN_OFFLINE_SECONDS) return null
 
-        val gyro = state.level(Upgrades.GYRO)
+        val s = state
+        val gyro = s.active.level(Upgrades.GYRO)
         val credited = min(secondsAway, Stats.offlineCapHours(gyro) * 3600.0)
         val efficiency = Stats.offlineEfficiency(gyro)
+        val perSecond = motorIncomePerSecond(s, s.active) + garageIncomePerSecond(s)
+        val earned = perSecond * credited * efficiency
 
-        val motorRpm = Stats.motorRpm(state.level(Upgrades.MOTOR))
-        val motorOmega = rpmToOmega(motorRpm)
-        val revolutions = motorOmega / TWO_PI * credited
-        val earned = revolutions * incomePerRevolution(state, motorRpm, 0.0, 0.0) * efficiency
-
-        val dir = if (state.omega < 0.0) -1.0 else 1.0
-        state = state.copy(
-            omega = dir * motorOmega,
-            combo = 0.0,
-            turboCharge = 1.0,
-            turboCooldown = 0.0,
-            points = state.points + earned,
-            pointsThisRun = state.pointsThisRun + earned,
-            totalPointsEarned = state.totalPointsEarned + earned,
-            totalRevolutions = state.totalRevolutions + revolutions,
+        val activeMotor = rpmToOmega(motorRpm(s.active, Skins.buff(s)))
+        state = s.copy(
+            points = s.points + earned,
+            totalPointsEarned = s.totalPointsEarned + earned,
+            buff = null,
+            buffRemaining = 0.0,
             lastSavedEpochMs = nowEpochMs,
+            balls = s.balls.map { b ->
+                val motor = if (b.id == s.activeBallId) activeMotor else rpmToOmega(motorRpm(b, SkinBuff.NONE))
+                val dir = if (b.omega < 0.0) -1.0 else 1.0
+                b.copy(
+                    omega = dir * motor,
+                    combo = 0.0,
+                    turboCharge = 1.0,
+                    turboCooldown = 0.0,
+                    pointsThisRun = if (b.id == s.activeBallId) b.pointsThisRun + earned else b.pointsThisRun,
+                    totalRevolutions = b.totalRevolutions + motor / TWO_PI * credited,
+                )
+            },
         )
         unlockAchievements()
         return OfflineReport(secondsAway, credited, earned, efficiency)
@@ -351,37 +574,72 @@ class GameEngine(initial: GameState = GameState()) {
 
     fun view(): GameView {
         val s = state
-        val rpm = s.rpm
-        val turboLevel = s.level(Upgrades.OVERDRIVE)
+        val b = s.active
+        val type = BallTypes.get(b.typeId)
+        val skin = Skins.buff(s)
+        val rpm = b.rpm
+        val turboLevel = b.level(Upgrades.OVERDRIVE)
         val w = turboWeight
-        val boosting = w > 0.0 && s.turboCharge > 0.0
-        val baseCap = Stats.rpmCap(s.level(Upgrades.COOLING))
-        val perRev = incomePerRevolution(s, rpm, s.combo, if (boosting) w else 0.0)
+        val boosting = w > 0.0 && b.turboCharge > 0.0
+        val baseCap = baseRpmCap(b, type, skin)
+        val buff = s.activeBuff
+        val perRev = incomePerRevolution(s, b, type, skin, rpm, b.combo, if (boosting) w else 0.0, buff)
+        val rack = Stats.rackEfficiency(s.accountLevel(Upgrades.RACK))
         return GameView(
             state = s,
+            ball = b,
+            type = type,
             rpm = rpm,
-            direction = s.direction,
+            direction = b.direction,
             rpmCap = if (boosting) baseCap * (1.0 + w * (Stats.turboCapMultiplier(turboLevel) - 1.0)) else baseCap,
             baseRpmCap = baseCap,
-            pointsPerSecond = abs(s.omega) / TWO_PI * perRev,
+            pointsPerSecond = abs(b.omega) / TWO_PI * perRev,
             pointsPerRev = perRev,
-            totalMultiplier = totalMultiplier(s, rpm, s.combo, if (boosting) w else 0.0),
-            petalsOpen = petalsOpen(s, rpm),
-            petalMultiplier = Stats.petalMultiplier(s.level(Upgrades.PETALS)),
-            comboMultiplier = 1.0 + s.combo,
+            totalMultiplier = totalMultiplier(s, b, type, skin, rpm, b.combo, if (boosting) w else 0.0, buff),
+            petalsOpen = petalsOpen(b, rpm),
+            petalMultiplier = Stats.petalMultiplier(b.level(Upgrades.PETALS)),
+            comboMultiplier = 1.0 + b.combo,
             zenMultiplier = Stats.zenMultiplier(s.zen),
-            turboCharge = s.turboCharge,
-            turboCooldown = s.turboCooldown,
+            turboCharge = b.turboCharge,
+            turboCooldown = b.turboCooldown,
             turboWeight = w,
             turboBoosting = boosting,
-            turboOverheating = w > 0.0 && s.turboCharge <= 0.0,
+            turboOverheating = w > 0.0 && b.turboCharge <= 0.0,
             turboCapMultiplier = Stats.turboCapMultiplier(turboLevel),
-            motorRpm = Stats.motorRpm(s.level(Upgrades.MOTOR)),
+            motorRpm = motorRpm(b, skin),
             zenOnReset = zenOnReset(),
             fxTier = Stats.fxTier(rpm),
             fingerTouching = fingerTouching,
-            bodyColor = Cosmetics.equipped(s, CosmeticSlot.BODY).color,
-            capColor = Cosmetics.equipped(s, CosmeticSlot.CAP).color,
+            bodyColor = type.body,
+            capColor = type.cap,
+            auraColor = type.aura,
+            outerSkin = Skins.equipped(s, SkinSlot.OUTER),
+            interiorSkin = Skins.equipped(s, SkinSlot.INTERIOR),
+            topView = b.topView,
+            topViewUnlocked = b.level(Upgrades.GIMBAL) > 0,
+            gems = s.gems,
+            chestCost = chestCost(),
+            canOpenChest = canOpenChest(),
+            garageFull = s.balls.size >= Stats.MAX_BALLS,
+            balls = s.balls.map { ball ->
+                val isActive = ball.id == s.activeBallId
+                BallSummary(
+                    id = ball.id,
+                    typeId = ball.typeId,
+                    rarity = BallTypes.get(ball.typeId).rarity,
+                    rpm = ball.rpm,
+                    pointsPerSecond = if (isActive) abs(b.omega) / TWO_PI * perRev else motorIncomePerSecond(s, ball) * rack,
+                    upgradeLevels = ball.upgrades.values.sum(),
+                    sellValue = Stats.sellValue(ball),
+                    isActive = isActive,
+                    prestigeCount = ball.prestigeCount,
+                )
+            },
+            garageIncomePerSecond = garageIncomePerSecond(s),
+            sparkActive = s.sparkRemaining > 0.0,
+            sparkRemaining = s.sparkRemaining,
+            buff = buff,
+            buffRemaining = s.buffRemaining,
         )
     }
 

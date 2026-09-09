@@ -16,8 +16,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,6 +35,7 @@ import com.aeunal.stressball.core.NumberFormat
 import com.aeunal.stressball.core.Stats
 import com.aeunal.stressball.core.UpgradeCategory
 import com.aeunal.stressball.core.UpgradeDef
+import com.aeunal.stressball.core.UpgradeScope
 import com.aeunal.stressball.core.Upgrades
 import com.aeunal.stressball.ui.theme.BallColors
 
@@ -61,8 +62,13 @@ fun UpgradesSheet(
                 color = BallColors.GreenLight,
             )
         }
-        Spacer(Modifier.height(8.dp))
-        TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
+        Text(
+            stringResource(R.string.upgrades_hint, Stats.GEMS_PER_MAX),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+        ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 12.dp) {
             categories.forEachIndexed { i, c ->
                 Tab(selected = tab == i, onClick = { tab = i }, text = { Text(text.category(c)) })
             }
@@ -99,7 +105,8 @@ private fun UpgradeCard(def: UpgradeDef, view: GameView, onBuy: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(text.upgradeName(def.id), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stringResource(R.string.level_format, level, def.maxLevel),
+                    stringResource(R.string.level_format, level, def.maxLevel) +
+                        if (def.scope == UpgradeScope.ACCOUNT) "  •  " + stringResource(R.string.scope_account) else "",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -160,7 +167,7 @@ private fun ZenCard(view: GameView, onPrestige: () -> Unit) {
             Text(
                 stringResource(
                     R.string.zen_card_run,
-                    NumberFormat.compact(view.state.pointsThisRun),
+                    NumberFormat.compact(view.ball.pointsThisRun),
                     NumberFormat.compact(next, 0),
                 ),
                 style = MaterialTheme.typography.bodySmall,

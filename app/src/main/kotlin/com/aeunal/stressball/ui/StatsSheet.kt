@@ -28,18 +28,21 @@ fun StatsSheet(view: GameView) {
     val text = LocalGameText.current
     val s = view.state
     val rows = listOf(
-        stringResource(R.string.stat_best_rpm) to NumberFormat.integer(s.bestRpm),
-        stringResource(R.string.stat_revolutions) to NumberFormat.compact(s.totalRevolutions),
+        stringResource(R.string.stat_best_rpm) to NumberFormat.integer(s.balls.maxOf { it.bestRpm }),
+        stringResource(R.string.stat_revolutions) to NumberFormat.compact(s.balls.sumOf { it.totalRevolutions }),
         stringResource(R.string.stat_lifetime_points) to NumberFormat.compact(s.totalPointsEarned),
-        stringResource(R.string.stat_run_points) to NumberFormat.compact(s.pointsThisRun),
+        stringResource(R.string.stat_run_points) to NumberFormat.compact(view.ball.pointsThisRun),
+        stringResource(R.string.stat_balls) to "${s.balls.size} (${s.chestsOpened} ${stringResource(R.string.stat_chests)}, ${s.ballsSold} ${stringResource(R.string.stat_sold)})",
+        stringResource(R.string.stat_gems) to s.gems.toString(),
         stringResource(R.string.stat_zen) to "${s.zen} (x${NumberFormat.compact(view.zenMultiplier, 2)})",
-        stringResource(R.string.stat_resets) to s.prestigeCount.toString(),
+        stringResource(R.string.stat_resets) to s.balls.sumOf { it.prestigeCount }.toString(),
+        stringResource(R.string.stat_sparks) to s.sparksTapped.toString(),
         stringResource(R.string.stat_play_time) to NumberFormat.duration(s.playTimeSeconds),
         stringResource(R.string.stat_achievements) to "${s.achievements.size} / ${Achievements.all.size}",
     )
 
     LazyColumn(
-        modifier = Modifier.fillMaxWidth().height(520.dp),
+        modifier = Modifier.fillMaxWidth().height(560.dp),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
     ) {
         item {
